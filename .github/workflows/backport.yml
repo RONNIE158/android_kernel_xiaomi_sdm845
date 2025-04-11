@@ -22,7 +22,7 @@ jobs:
 
       - name: Clone Upstream Kernel (v4.14)
         run: |
-          git clone --depth=1 --branch v4.14 https://github.com/torvalds/linux upstream-kernel
+          git clone --depth=1 --branch main https://github.com/diphons/D8G_Kernel_old upstream-kernel
 
       - name: Backport CGroup v2 Source Code
         run: |
