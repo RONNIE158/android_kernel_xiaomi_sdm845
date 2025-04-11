@@ -1,11 +1,11 @@
-name: Backport CGroup2 & LXC for Beryllium
+name: Backport CGroup2 for LXC v6
 
 on:
   workflow_dispatch:
 
 jobs:
   backport:
-    name: Backport Kernel Features
+    name: Backport CGroup2 Features
     runs-on: ubuntu-latest
 
     steps:
@@ -13,36 +13,37 @@ jobs:
         uses: actions/checkout@v3
         with:
           ref: mainline
+          fetch-depth: 0
 
       - name: Set Up Git
         run: |
           git config --global user.name "Backport Bot"
           git config --global user.email "bot@example.com"
-          git checkout -b lxc-cgroup2-backport
+          git checkout -b cgroup2-lxc-v6
 
       - name: Clone Upstream Kernel (v4.14)
         run: |
           git clone --depth=1 --branch kernel.lnx.4.14.r1 https://github.com/android-linux-stable/msm-4.14 upstream-kernel
 
-      - name: Backport CGroup v2 Source Code
+      - name: Backport CGroup v2 Core Code
         run: |
-          rsync -av --ignore-existing upstream-kernel/kernel/cgroup/ kernel/cgroup/
-          rsync -av --ignore-existing upstream-kernel/include/linux/cgroup* include/linux/
-          rsync -av --ignore-existing upstream-kernel/mm/memcontrol.c mm/
-          rsync -av --ignore-existing upstream-kernel/include/linux/memcontrol.h include/linux/
-          rsync -av --ignore-existing upstream-kernel/fs/proc/ fs/proc/
-          rsync -av --ignore-existing upstream-kernel/include/uapi/linux/cgroupstats.h include/uapi/linux/
+          rsync -av upstream-kernel/kernel/cgroup/ kernel/cgroup/
+          rsync -av upstream-kernel/include/linux/cgroup* include/linux/
+          rsync -av upstream-kernel/include/linux/memcontrol.h include/linux/
+          rsync -av upstream-kernel/mm/memcontrol.c mm/
+          rsync -av upstream-kernel/include/uapi/linux/cgroupstats.h include/uapi/linux/
+          rsync -av upstream-kernel/fs/proc/task_mmu.c fs/proc/ || true
 
       - name: Commit and Push Backport Branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git add kernel/cgroup/ \
                   include/linux/cgroup* \
-                  mm/memcontrol.c \
                   include/linux/memcontrol.h \
-                  fs/proc/ \
-                  include/uapi/linux/cgroupstats.h
-          git commit -m "backport: cgroup2, selinux, lxc/docker, nethunter, memory support"
-          git push origin lxc-cgroup2-backport
+                  mm/memcontrol.c \
+                  include/uapi/linux/cgroupstats.h \
+                  fs/proc/task_mmu.c
 
-
----
+          git commit -m "backport: minimal cgroup v2 support for LXC v6"
+          git push origin cgroup2-lxc-v6
