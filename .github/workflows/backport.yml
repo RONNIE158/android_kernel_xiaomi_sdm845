@@ -9,73 +9,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Kernel Repo
-      uses: actions/checkout@v3
-      with:
-        ref: mainline
+      - name: Checkout Kernel Repo
+        uses: actions/checkout@v3
+        with:
+          ref: mainline
 
-    - name: Set Up Git
-      run: |
-        git config --global user.name "Backport Bot"
-        git config --global user.email "bot@example.com"
-        git checkout -b lxc-cgroup2-backport
+      - name: Set Up Git
+        run: |
+          git config --global user.name "Backport Bot"
+          git config --global user.email "bot@example.com"
+          git checkout -b lxc-cgroup2-backport
 
-    - name: Clone Upstream Kernel (v4.14)
-      run: |
-        git clone --depth=1 --branch v4.14 https://github.com/torvalds/linux.git upstream-kernel
+      - name: Clone Upstream Kernel (v4.14)
+        run: |
+          git clone --depth=1 --branch v4.14 https://github.com/torvalds/linux.git upstream-kernel
 
-    - name: Backport CGroup v2 Source Code
-      run: |
-        rsync -av --ignore-existing \
-          upstream-kernel/kernel/cgroup/ \
-          kernel/cgroup/
-        rsync -av --ignore-existing \
-          upstream-kernel/include/linux/cgroup* \
-          include/linux/
+      - name: Backport CGroup v2 Source Code
+        run: |
+          rsync -av --ignore-existing upstream-kernel/kernel/cgroup/ kernel/cgroup/
+          rsync -av --ignore-existing upstream-kernel/include/linux/cgroup* include/linux/
+          rsync -av --ignore-existing upstream-kernel/mm/memcontrol.c mm/
+          rsync -av --ignore-existing upstream-kernel/include/linux/memcontrol.h include/linux/
+          rsync -av --ignore-existing upstream-kernel/fs/proc/ fs/proc/
+          rsync -av --ignore-existing upstream-kernel/include/uapi/linux/cgroupstats.h include/uapi/linux/
 
-    - name: Patch Defconfig for Features
-      run: |
-        cat <<EOF >> arch/arm64/configs/vendor/beryllium_defconfig
+      - name: Commit and Push Backport Branch
+        run: |
+          git add kernel/cgroup/ \
+                  include/linux/cgroup* \
+                  mm/memcontrol.c \
+                  include/linux/memcontrol.h \
+                  fs/proc/ \
+                  include/uapi/linux/cgroupstats.h
+          git commit -m "backport: cgroup2, selinux, lxc/docker, nethunter, memory support"
+          git push origin lxc-cgroup2-backport
 
-# CGroup2 & Containers
-CONFIG_CGROUP2=y
-CONFIG_CPUSETS=y
-CONFIG_CGROUP_CPUACCT=y
-CONFIG_CGROUP_PIDS=y
-CONFIG_CGROUP_FREEZER=y
-CONFIG_CGROUP_SCHED=y
-CONFIG_MEMCG=y
-CONFIG_MEMCG_KMEM=y
-CONFIG_USER_NS=y
-CONFIG_PID_NS=y
-CONFIG_NET_NS=y
-CONFIG_UTS_NS=y
-CONFIG_IPC_NS=y
-CONFIG_OVERLAY_FS=y
-CONFIG_VETH=y
-CONFIG_BRIDGE=y
-CONFIG_BRIDGE_NETFILTER=y
-CONFIG_NF_NAT=y
-CONFIG_NF_CONNTRACK=y
-CONFIG_DEVPTS_MULTIPLE_INSTANCES=y
 
-# SELinux permissive
-CONFIG_SECURITY_SELINUX=y
-CONFIG_SECURITY_SELINUX_BOOTPARAM=y
-CONFIG_SECURITY_SELINUX_BOOTPARAM_VALUE=0
-CONFIG_SECURITY_SELINUX_DISABLE=y
-
-# Nethunter / Keckhunter
-CONFIG_KEXEC=y
-CONFIG_KEXEC_FILE=y
-CONFIG_KEXEC_VERIFY_SIG=y
-CONFIG_TUN=y
-CONFIG_HIDRAW=y
-CONFIG_INPUT_EVBUG=y
-EOF
-
-    - name: Commit and Push Backport Branch
-      run: |
-        git add arch/arm64/configs/vendor/beryllium_defconfig kernel/cgroup/ include/linux/cgroup*
-        git commit -m "backport: cgroup2, selinux, lxc/docker, nethunter support"
-        git push origin lxc-cgroup2-backport
+---
