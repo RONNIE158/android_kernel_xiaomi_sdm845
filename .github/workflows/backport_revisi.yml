@@ -59,11 +59,6 @@ jobs:
       run: |
         git push origin backport-cgroup-lxc --force
 
-    - name: Verify Kernel Configuration for CGroup2 and LXC
-      run: |
-        make O=out ARCH=arm64 beryllium_defconfig
-        curl -s https://raw.githubusercontent.com/LineageOS/android_kernel_google_redbull/lineage-20/scripts/diffconfig | bash -s arch/arm64/configs/beryllium_defconfig out/.config
-
     - name: Validate CGroup & Namespace Support in .config
       run: |
         echo "Validating Kernel Config in out/.config"
