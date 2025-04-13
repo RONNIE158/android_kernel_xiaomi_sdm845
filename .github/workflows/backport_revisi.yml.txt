@@ -1,0 +1,65 @@
+name: Backport CGroup2 & LXC for Kernel 4.9 revisi
+
+on:
+  workflow_dispatch:
+
+jobs:
+  backport:
+    name: Backport CGroup2 & LXC from Kernel 4.14 to 4.9
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Kernel 4.9 Repo
+      uses: actions/checkout@v3
+      with:
+        repository: RONNIE158/android_kernel_xiaomi_sdm845
+        ref: cgroup-v2
+
+    - name: Set Up Git Configuration
+      run: |
+        git config --global user.name "Backport Bot"
+        git config --global user.email "bot@example.com"
+        git checkout -b backport-cgroup-lxc
+
+    - name: Clone Kernel 4.14 Source (from Your Repo)
+      run: |
+        git clone --depth=1 --branch rebase https://github.com/RONNIE158/android_kernel_xiaomi_sdm845_4.14 kernel-4.14
+
+    - name: Sync CGroup2 Files from Kernel 4.14 to 4.9
+      run: |
+        echo "Syncing CGroup2 Files"
+        rsync -av --ignore-existing kernel-4.14/kernel/cgroup/ kernel/cgroup/
+        rsync -av --ignore-existing kernel-4.14/include/linux/cgroup* include/linux/
+        rsync -av --ignore-existing kernel-4.14/include/uapi/linux/cgroup* include/uapi/linux/
+        rsync -av --ignore-existing kernel-4.14/kernel/sched/ kernel/sched/
+
+    - name: Sync Kernel Configurations
+      run: |
+        echo "Syncing Kernel Configurations"
+        echo 'CONFIG_CGROUPS=y' >> arch/arm64/configs/beryllium_defconfig
+        echo 'CONFIG_CGROUP_SCHED=y' >> arch/arm64/configs/beryllium_defconfig
+        echo 'CONFIG_CGROUP_CPUACCT=y' >> arch/arm64/configs/beryllium_defconfig
+        echo 'CONFIG_CGROUP_BPF=y' >> arch/arm64/configs/beryllium_defconfig
+        echo 'CONFIG_CGROUP2=y' >> arch/arm64/configs/beryllium_defconfig
+        echo 'CONFIG_NAMESPACES=y' >> arch/arm64/configs/beryllium_defconfig
+        echo 'CONFIG_USER_NS=y' >> arch/arm64/configs/beryllium_defconfig
+        echo 'CONFIG_PID_NS=y' >> arch/arm64/configs/beryllium_defconfig
+
+    - name: Commit Changes for CGroup2 & LXC Backport
+      run: |
+        git add arch/arm64/configs/beryllium_defconfig kernel/cgroup/ include/linux/cgroup*
+        git commit -m "Backport CGroup2 and LXC from 4.14 (RONNIE158 repo) to 4.9"
+
+    - name: Push Changes to Branch
+      run: |
+        git push origin backport-cgroup-lxc
+
+    - name: Verify Kernel Configuration for CGroup2 and LXC
+      run: |
+        make O=out ARCH=arm64 beryllium_defconfig
+        curl -s https://raw.githubusercontent.com/LineageOS/android_kernel_google_redbull/lineage-20/scripts/diffconfig | bash -s arch/arm64/configs/beryllium_defconfig out/.config
+
+    - name: Test Configuration with LXC Check
+      run: |
+        curl -s https://github.com/lxc/lxc/raw/main/tools/lxc-checkconfig | bash
+        lxc-checkconfig
