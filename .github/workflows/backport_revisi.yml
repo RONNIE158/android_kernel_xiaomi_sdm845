@@ -52,6 +52,7 @@ jobs:
 
     - name: Push Changes to Branch
       run: |
+        git pull origin backport-cgroup-lxc --rebase || echo "No need to rebase"
         git push origin backport-cgroup-lxc
 
     - name: Verify Kernel Configuration for CGroup2 and LXC
