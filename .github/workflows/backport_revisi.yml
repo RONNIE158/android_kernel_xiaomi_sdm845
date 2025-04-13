@@ -33,17 +33,20 @@ jobs:
         rsync -av --ignore-existing kernel-4.14/include/uapi/linux/cgroup* include/uapi/linux/
         rsync -av --ignore-existing kernel-4.14/kernel/sched/ kernel/sched/
 
-    - name: Sync Kernel Configurations
+    - name: Update Kernel Config with Scripts
       run: |
-        echo "Syncing Kernel Configurations"
-        echo 'CONFIG_CGROUPS=y' >> arch/arm64/configs/beryllium_defconfig
-        echo 'CONFIG_CGROUP_SCHED=y' >> arch/arm64/configs/beryllium_defconfig
-        echo 'CONFIG_CGROUP_CPUACCT=y' >> arch/arm64/configs/beryllium_defconfig
-        echo 'CONFIG_CGROUP_BPF=y' >> arch/arm64/configs/beryllium_defconfig
-        echo 'CONFIG_CGROUP2=y' >> arch/arm64/configs/beryllium_defconfig
-        echo 'CONFIG_NAMESPACES=y' >> arch/arm64/configs/beryllium_defconfig
-        echo 'CONFIG_USER_NS=y' >> arch/arm64/configs/beryllium_defconfig
-        echo 'CONFIG_PID_NS=y' >> arch/arm64/configs/beryllium_defconfig
+        make O=out ARCH=arm64 beryllium_defconfig
+        scripts/config --file out/.config \
+          --enable CGROUPS \
+          --enable CGROUP_SCHED \
+          --enable CGROUP_CPUACCT \
+          --enable CGROUP_BPF \
+          --enable CGROUP2 \
+          --enable NAMESPACES \
+          --enable USER_NS \
+          --enable PID_NS
+        make O=out ARCH=arm64 savedefconfig
+        cp out/defconfig arch/arm64/configs/beryllium_defconfig
 
     - name: Commit Changes for CGroup2 & LXC Backport
       run: |
@@ -52,7 +55,6 @@ jobs:
 
     - name: Push Changes to Branch
       run: |
-        git pull origin backport-cgroup-lxc --rebase || echo "No need to rebase"
         git push origin backport-cgroup-lxc
 
     - name: Verify Kernel Configuration for CGroup2 and LXC
@@ -62,5 +64,8 @@ jobs:
 
     - name: Test Configuration with LXC Check
       run: |
-        curl -s https://github.com/lxc/lxc/raw/main/tools/lxc-checkconfig | bash
-        lxc-checkconfig
+        sudo apt-get update
+        sudo apt-get install -y lxc
+        curl -s https://raw.githubusercontent.com/lxc/lxc/main/scripts/lxc-checkconfig.py -o lxc-checkconfig.py
+        chmod +x lxc-checkconfig.py
+        python3 lxc-checkconfig.py
