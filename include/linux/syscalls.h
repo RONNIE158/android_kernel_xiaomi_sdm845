@@ -7,12 +7,6 @@
  * This file is released under the GPLv2.
  * See the file COPYING for more details.
  */
-
-#ifndef _LINUX_SYSCALLS_H
-asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);
-#define _LINUX_SYSCALLS_H
-asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);
-
 struct epoll_event;
 struct iattr;
 struct inode;
