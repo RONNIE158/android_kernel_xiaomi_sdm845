@@ -20,23 +20,26 @@ jobs:
       - name: Apply openat2 Patch to Kernel
         run: |
           echo "Applying openat2 patch..."
+          
           # Tambah file openat2.h
           mkdir -p include/uapi/linux
           cat <<EOF > include/uapi/linux/openat2.h
           #ifndef _UAPI_LINUX_OPENAT2_H
           #define _UAPI_LINUX_OPENAT2_H
+          
           struct open_how {
               __u64 flags;
               __u64 mode;
               __u64 resolve;
           };
+          
           #endif
           EOF
 
-          # Tambah deklarasi syscall
+          # Tambah deklarasi syscall ke syscalls.h
           sed -i '/SYSCALLS/a\asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);' include/linux/syscalls.h
 
-          # Tambah implementasi syscall
+          # Tambah implementasi syscall openat2
           cat <<EOF > fs/openat2.c
           // SPDX-License-Identifier: GPL-2.0
           #include <linux/syscalls.h>
@@ -59,10 +62,10 @@ jobs:
           }
           EOF
 
-          # Tambah entry syscall table
+          # Tambah entry ke syscall_table.S
           sed -i '$ a\    .long sys_openat2' arch/arm64/kernel/syscall_table.S
 
-          # Tambah ke Makefile
+          # Tambah openat2.o ke Makefile
           sed -i '/obj-y += open.o/ a\obj-y += openat2.o' fs/Makefile
 
       - name: Commit and Push Changes
