@@ -23,47 +23,79 @@ jobs:
 
           mkdir -p include/uapi/linux fs arch/arm64/kernel
 
-          cat > include/uapi/linux/openat2.h << 'EOF'
-#ifndef _UAPI_LINUX_OPENAT2_H
-#define _UAPI_LINUX_OPENAT2_H
-struct open_how {
-  __u64 flags;
-  __u64 mode;
-  __u64 resolve;
-};
-#endif
-EOF
+          # Patching openat2
+          echo '#ifndef _UAPI_LINUX_OPENAT2_H' > include/uapi/linux/openat2.h
+          echo '#define _UAPI_LINUX_OPENAT2_H' >> include/uapi/linux/openat2.h
+          echo 'struct open_how {' >> include/uapi/linux/openat2.h
+          echo '  __u64 flags;' >> include/uapi/linux/openat2.h
+          echo '  __u64 mode;' >> include/uapi/linux/openat2.h
+          echo '  __u64 resolve;' >> include/uapi/linux/openat2.h
+          echo '};' >> include/uapi/linux/openat2.h
+          echo '#endif' >> include/uapi/linux/openat2.h
 
-          cat > fs/openat2.c << 'EOF'
-// SPDX-License-Identifier: GPL-2.0
-#include <linux/syscalls.h>
-#include <linux/fs.h>
-#include <linux/uaccess.h>
-#include <linux/openat2.h>
-SYSCALL_DEFINE4(openat2, int, dfd, const char __user *, filename,
-                struct open_how __user *, how, size_t, size)
-{
-  struct open_how k_how;
-  if (size != sizeof(struct open_how))
-    return -EINVAL;
-  if (copy_from_user(&k_how, how, size))
-    return -EFAULT;
-  return do_sys_open(dfd, filename, k_how.flags, k_how.mode);
-}
-EOF
+          echo '// SPDX-License-Identifier: GPL-2.0' > fs/openat2.c
+          echo '#include <linux/syscalls.h>' >> fs/openat2.c
+          echo '#include <linux/fs.h>' >> fs/openat2.c
+          echo '#include <linux/uaccess.h>' >> fs/openat2.c
+          echo '#include <linux/openat2.h>' >> fs/openat2.c
+          echo 'SYSCALL_DEFINE4(openat2, int, dfd, const char __user *, filename,' >> fs/openat2.c
+          echo '                struct open_how __user *, how, size_t, size)' >> fs/openat2.c
+          echo '{' >> fs/openat2.c
+          echo '  struct open_how k_how;' >> fs/openat2.c
+          echo '  if (size != sizeof(struct open_how))' >> fs/openat2.c
+          echo '    return -EINVAL;' >> fs/openat2.c
+          echo '  if (copy_from_user(&k_how, how, size))' >> fs/openat2.c
+          echo '    return -EFAULT;' >> fs/openat2.c
+          echo '  return do_sys_open(dfd, filename, k_how.flags, k_how.mode);' >> fs/openat2.c
+          echo '}' >> fs/openat2.c
 
-          cat > arch/arm64/kernel/syscall_table.S << 'EOF'
-.long sys_ni_syscall    /* 223 */
-.long sys_openat2       /* 224 */
-.long sys_mount_setattr /* 225 */
-.long sys_move_mount    /* 226 */
-EOF
+          # Patching mount_setattr
+          echo '// SPDX-License-Identifier: GPL-2.0' > fs/mount_setattr.c
+          echo '#include <linux/syscalls.h>' >> fs/mount_setattr.c
+          echo '#include <linux/fs.h>' >> fs/mount_setattr.c
+          echo '#include <linux/mount.h>' >> fs/mount_setattr.c
+          echo '#include <linux/uaccess.h>' >> fs/mount_setattr.c
+          echo 'SYSCALL_DEFINE5(mount_setattr, int, dfd, const char __user *, path,' >> fs/mount_setattr.c
+          echo '                unsigned int, flags, struct mount_attr __user *, uattr, size_t, size)' >> fs/mount_setattr.c
+          echo '{' >> fs/mount_setattr.c
+          echo '    if (size != sizeof(struct mount_attr))' >> fs/mount_setattr.c
+          echo '        return -EINVAL;' >> fs/mount_setattr.c
+          echo '    return mount_setattr_internal(dfd, path, flags, uattr);' >> fs/mount_setattr.c
+          echo '}' >> fs/mount_setattr.c
 
-          grep -q sys_openat2 include/linux/syscalls.h || \
-          echo 'asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);' >> include/linux/syscalls.h
+          # Patching move_mount
+          echo '// SPDX-License-Identifier: GPL-2.0' > fs/move_mount.c
+          echo '#include <linux/syscalls.h>' >> fs/move_mount.c
+          echo '#include <linux/fs.h>' >> fs/move_mount.c
+          echo '#include <linux/mount.h>' >> fs/move_mount.c
+          echo '#include <linux/uaccess.h>' >> fs/move_mount.c
+          echo 'SYSCALL_DEFINE5(move_mount, int, from_dfd, const char __user *, from_pathname,' >> fs/move_mount.c
+          echo '                int, to_dfd, const char __user *, to_pathname, unsigned int, flags)' >> fs/move_mount.c
+          echo '{' >> fs/move_mount.c
+          echo '    if (flags & MOUNT_BIND) {' >> fs/move_mount.c
+          echo '        return move_mount_internal(from_dfd, from_pathname, to_dfd, to_pathname, flags);' >> fs/move_mount.c
+          echo '    }' >> fs/move_mount.c
+          echo '    return -EINVAL;' >> fs/move_mount.c
+          echo '}' >> fs/move_mount.c
 
-          grep -q openat2.o fs/Makefile || \
-          echo 'obj-y += openat2.o' >> fs/Makefile
+          # Menambahkan ke syscall_table.S
+          echo '.long sys_ni_syscall    /* 223 */' > arch/arm64/kernel/syscall_table.S
+          echo '.long sys_openat2       /* 224 */' >> arch/arm64/kernel/syscall_table.S
+          echo '.long sys_mount_setattr /* 225 */' >> arch/arm64/kernel/syscall_table.S
+          echo '.long sys_move_mount    /* 226 */' >> arch/arm64/kernel/syscall_table.S
+
+          # Tambah ke header syscalls.h
+          grep -q sys_mount_setattr include/linux/syscalls.h || \
+          echo 'asmlinkage long sys_mount_setattr(int dfd, const char __user *path, unsigned int flags, struct mount_attr __user *uattr, size_t size);' >> include/linux/syscalls.h
+
+          grep -q sys_move_mount include/linux/syscalls.h || \
+          echo 'asmlinkage long sys_move_mount(int from_dfd, const char __user *from_pathname, int to_dfd, const char __user *to_pathname, unsigned int flags);' >> include/linux/syscalls.h
+
+          # Menambahkan ke fs/Makefile
+          grep -q move_mount.o fs/Makefile || \
+          echo 'obj-y += move_mount.o' >> fs/Makefile
+          grep -q mount_setattr.o fs/Makefile || \
+          echo 'obj-y += mount_setattr.o' >> fs/Makefile
 
       - name: Commit and Push Changes (Skip if No Changes)
         run: |
@@ -76,3 +108,4 @@ EOF
           else
             git commit -m "Patch syscall: openat2, mount_setattr, move_mount"
             git push origin backport-cgroup-lxc
+          fi
