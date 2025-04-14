@@ -3,10 +3,10 @@ name: Auto Patch Kernel for openat2 Support
 on:
   push:
     branches:
-      - main  # Ganti dengan branch yang sesuai
+      - lineage-21  # Ganti dengan branch yang sesuai
   pull_request:
     branches:
-      - main  # Ganti dengan branch yang sesuai
+      - backport-cgroup-lxc  # Ganti dengan branch yang sesuai
 
 jobs:
   patch-openat2:
