@@ -1,0 +1,76 @@
+name: Auto Patch openat2 Syscall ke Kernel 4.9
+
+on:
+  push:
+    branches:
+      - lineage-test
+  workflow_dispatch:
+
+jobs:
+  patch-openat2:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Kernel Source
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: backport-cgroup-lxc
+
+      - name: Tambahkan File Header openat2
+        run: |
+          mkdir -p include/uapi/linux
+          cat <<EOF > include/uapi/linux/openat2.h
+          #ifndef _UAPI_LINUX_OPENAT2_H
+          #define _UAPI_LINUX_OPENAT2_H
+          struct open_how {
+              __u64 flags;
+              __u64 mode;
+              __u64 resolve;
+          };
+          #endif
+          EOF
+
+      - name: Deklarasi Syscall di syscalls.h
+        run: |
+          sed -i '/SYSCALL_DEFINE/i\\asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);' include/linux/syscalls.h
+
+      - name: Tambahkan Implementasi openat2
+        run: |
+          cat <<EOF > fs/openat2.c
+          // SPDX-License-Identifier: GPL-2.0
+          #include <linux/syscalls.h>
+          #include <linux/fs.h>
+          #include <linux/uaccess.h>
+          #include <linux/openat2.h>
+
+          SYSCALL_DEFINE4(openat2, int, dfd, const char __user *, filename,
+                          struct open_how __user *, how, size_t, size)
+          {
+              struct open_how k_how;
+
+              if (size != sizeof(struct open_how))
+                  return -EINVAL;
+
+              if (copy_from_user(&k_how, how, size))
+                  return -EFAULT;
+
+              return do_sys_open(dfd, filename, k_how.flags, k_how.mode);
+          }
+          EOF
+
+      - name: Tambahkan ke syscall_table.S
+        run: |
+          sed -i '$ a\    .long sys_openat2' arch/arm64/kernel/syscall_table.S
+
+      - name: Tambahkan ke fs/Makefile
+        run: |
+          sed -i '/obj-y += open.o/ a\obj-y += openat2.o' fs/Makefile || echo 'obj-y += openat2.o' >> fs/Makefile
+
+      - name: Commit dan Push Perubahan
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add .
+          git commit -m "Tambah syscall openat2 secara otomatis"
+          git push origin backport-cgroup-lxc
