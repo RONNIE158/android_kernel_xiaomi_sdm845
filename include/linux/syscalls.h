@@ -931,3 +931,5 @@ asmlinkage long sys_pidfd_send_signal(int pidfd, int sig,
 				       unsigned int flags);
 
 #endif
+asmlinkage long sys_mount_setattr(int dfd, const char __user *path, unsigned int flags, struct mount_attr __user *uattr, size_t size);
+asmlinkage long sys_move_mount(int from_dfd, const char __user *from_pathname, int to_dfd, const char __user *to_pathname, unsigned int flags);
