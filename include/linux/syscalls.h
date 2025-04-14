@@ -7,6 +7,8 @@
  * This file is released under the GPLv2.
  * See the file COPYING for more details.
  */
+#ifndef _LINUX_SYSCALLS_H
+#define _LINUX_SYSCALLS_H
 struct epoll_event;
 struct iattr;
 struct inode;
