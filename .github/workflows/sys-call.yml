@@ -1,9 +1,9 @@
-name: Auto Patch openat2 Syscall ke Kernel 4.9
+name: Auto Patch Kernel for openat2 Support
 
 on:
   push:
     branches:
-      - lineage-test
+      - lineage-21
   workflow_dispatch:
 
 jobs:
@@ -14,11 +14,14 @@ jobs:
       - name: Checkout Kernel Source
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          repository: RONNIE158/android_kernel_xiaomi_sdm845
           ref: backport-cgroup-lxc
 
-      - name: Tambahkan File Header openat2
+      - name: Apply openat2 Patch to Kernel
         run: |
+          echo "Applying openat2 patch..."
+
+          # Tambah file openat2.h
           mkdir -p include/uapi/linux
           cat <<EOF > include/uapi/linux/openat2.h
           #ifndef _UAPI_LINUX_OPENAT2_H
@@ -31,12 +34,11 @@ jobs:
           #endif
           EOF
 
-      - name: Deklarasi Syscall di syscalls.h
-        run: |
-          sed -i '/SYSCALL_DEFINE/i\\asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);' include/linux/syscalls.h
+          # Tambah deklarasi syscall
+          grep -q 'sys_openat2' include/linux/syscalls.h || \
+          sed -i '/SYSCALLS/a\asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);' include/linux/syscalls.h
 
-      - name: Tambahkan Implementasi openat2
-        run: |
+          # Buat file implementasi syscall
           cat <<EOF > fs/openat2.c
           // SPDX-License-Identifier: GPL-2.0
           #include <linux/syscalls.h>
@@ -59,18 +61,20 @@ jobs:
           }
           EOF
 
-      - name: Tambahkan ke syscall_table.S
-        run: |
-          sed -i '$ a\    .long sys_openat2' arch/arm64/kernel/syscall_table.S
+          # Tambah entry ke syscall_table.S (buat kalau belum ada)
+          mkdir -p arch/arm64/kernel
+          touch arch/arm64/kernel/syscall_table.S
+          grep -q 'sys_openat2' arch/arm64/kernel/syscall_table.S || \
+          echo '    .long   sys_openat2' >> arch/arm64/kernel/syscall_table.S
 
-      - name: Tambahkan ke fs/Makefile
-        run: |
-          sed -i '/obj-y += open.o/ a\obj-y += openat2.o' fs/Makefile || echo 'obj-y += openat2.o' >> fs/Makefile
+          # Tambah openat2.o ke Makefile
+          grep -q 'openat2.o' fs/Makefile || \
+          sed -i '/obj-y += open.o/ a\obj-y += openat2.o' fs/Makefile
 
-      - name: Commit dan Push Perubahan
+      - name: Commit and Push Changes
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add .
-          git commit -m "Tambah syscall openat2 secara otomatis"
+          git commit -m "Add openat2 syscall support"
           git push origin backport-cgroup-lxc
