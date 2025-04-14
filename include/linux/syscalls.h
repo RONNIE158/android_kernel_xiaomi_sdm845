@@ -9,7 +9,9 @@
  */
 
 #ifndef _LINUX_SYSCALLS_H
+asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);
 #define _LINUX_SYSCALLS_H
+asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);
 
 struct epoll_event;
 struct iattr;
@@ -108,6 +110,7 @@ union bpf_attr;
 #define __SC_TEST(t, a) (void)BUILD_BUG_ON_ZERO(!__TYPE_IS_LL(t) && sizeof(t) > sizeof(long))
 
 #ifdef CONFIG_FTRACE_SYSCALLS
+asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);
 #define __SC_STR_ADECL(t, a)	#a
 #define __SC_STR_TDECL(t, a)	#t
 
