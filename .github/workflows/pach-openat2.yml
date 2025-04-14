@@ -123,6 +123,15 @@ obj-y += openat2.o\
 obj-y += mount_setattr.o\
 obj-y += move_mount.o' fs/Makefile
 
+          # -- Additional Edit Option --
+          echo "Editing existing files..."
+          # Example: Edit a file if a specific condition is met or user input
+          if [ -f "fs/Makefile" ]; then
+            sed -i '/obj-y += openat2.o/ a\
+# Custom edit section'
+            echo "Custom edits applied to fs/Makefile"
+          fi
+
       - name: Commit and Push Changes
         run: |
           git config user.name "GitHub Actions"
