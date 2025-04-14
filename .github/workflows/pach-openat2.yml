@@ -3,8 +3,8 @@ name: Auto Patch Kernel for openat2, mount_setattr, and move_mount
 on:
   push:
     branches:
-      - lineage-21
-  workflow_dispatch:
+      - lineage-21  # Trigger saat push ke branch ini
+  workflow_dispatch:  # Trigger manual dari GitHub UI
 
 jobs:
   patch-syscalls:
@@ -23,7 +23,7 @@ jobs:
 
           mkdir -p include/uapi/linux fs arch/arm64/kernel
 
-          # Timpa openat2.h
+          # Overwrite openat2.h
           cat <<EOF > include/uapi/linux/openat2.h
 #ifndef _UAPI_LINUX_OPENAT2_H
 #define _UAPI_LINUX_OPENAT2_H
@@ -37,7 +37,7 @@ struct open_how {
 #endif
 EOF
 
-          # Timpa openat2.c
+          # Overwrite openat2.c
           cat <<EOF > fs/openat2.c
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/syscalls.h>
@@ -60,7 +60,7 @@ SYSCALL_DEFINE4(openat2, int, dfd, const char __user *, filename,
 }
 EOF
 
-          # Timpa mount_setattr.c
+          # Overwrite mount_setattr.c
           cat <<EOF > fs/mount_setattr.c
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/syscalls.h>
@@ -73,7 +73,7 @@ SYSCALL_DEFINE5(mount_setattr, int, dfd, const char __user *, path, unsigned int
 }
 EOF
 
-          # Timpa mount_setattr.h
+          # Overwrite mount_setattr.h
           cat <<EOF > include/uapi/linux/mount_setattr.h
 #ifndef _UAPI_LINUX_MOUNT_SETATTR_H
 #define _UAPI_LINUX_MOUNT_SETATTR_H
@@ -88,7 +88,7 @@ struct mount_attr {
 #endif
 EOF
 
-          # Timpa move_mount.c
+          # Overwrite move_mount.c
           cat <<EOF > fs/move_mount.c
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/syscalls.h>
@@ -101,7 +101,7 @@ SYSCALL_DEFINE5(move_mount, int, from_dfd, const char __user *, from_pathname,
 }
 EOF
 
-          # Syscall table (replace or create)
+          # Overwrite syscall table
           cat <<EOF > arch/arm64/kernel/syscall_table.S
 .long sys_ni_syscall /* 223 */
 .long sys_openat2    /* 224 */
@@ -109,13 +109,13 @@ EOF
 .long sys_move_mount /* 226 */
 EOF
 
-          # Tambah ke syscalls.h jika belum ada
+          # Tambahkan deklarasi syscall ke syscalls.h jika belum ada
           grep -q 'sys_openat2' include/linux/syscalls.h || sed -i '/SYSCALLS/a\
 asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);\
 asmlinkage long sys_mount_setattr(int dfd, const char __user *path, unsigned int flags, struct mount_attr __user *uattr, size_t size);\
 asmlinkage long sys_move_mount(int from_dfd, const char __user *from_pathname, int to_dfd, const char __user *to_pathname, unsigned int flags);' include/linux/syscalls.h
 
-          # Tambah ke Makefile jika belum ada
+          # Tambahkan object file ke Makefile jika belum ada
           grep -q 'openat2.o' fs/Makefile || echo "obj-y += openat2.o" >> fs/Makefile
           grep -q 'mount_setattr.o' fs/Makefile || echo "obj-y += mount_setattr.o" >> fs/Makefile
           grep -q 'move_mount.o' fs/Makefile || echo "obj-y += move_mount.o" >> fs/Makefile
@@ -127,8 +127,7 @@ asmlinkage long sys_move_mount(int from_dfd, const char __user *from_pathname, i
 
           git add -A
           if git diff --cached --quiet; then
-            echo "No changes to commit."
+            echo "No changes to commit. Skipping commit."
           else
             git commit -m "Apply openat2, mount_setattr, and move_mount syscall patches"
             git push origin backport-cgroup-lxc
-          fi
