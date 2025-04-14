@@ -14,17 +14,16 @@ jobs:
       - name: Checkout Kernel Source
         uses: actions/checkout@v3
         with:
-          repository: RONNIE158/android_kernel_xiaomi_sdm845
           ref: backport-cgroup-lxc
 
       - name: Apply syscall patches
+        shell: bash
         run: |
           echo "Applying syscall patches..."
 
           mkdir -p include/uapi/linux fs arch/arm64/kernel
 
-          # openat2.h
-          cat <<EOF > include/uapi/linux/openat2.h
+          cat > include/uapi/linux/openat2.h << 'EOF'
 #ifndef _UAPI_LINUX_OPENAT2_H
 #define _UAPI_LINUX_OPENAT2_H
 struct open_how {
@@ -35,8 +34,7 @@ struct open_how {
 #endif
 EOF
 
-          # openat2.c
-          cat <<EOF > fs/openat2.c
+          cat > fs/openat2.c << 'EOF'
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/syscalls.h>
 #include <linux/fs.h>
@@ -54,23 +52,20 @@ SYSCALL_DEFINE4(openat2, int, dfd, const char __user *, filename,
 }
 EOF
 
-          # syscall table
-          cat <<EOF > arch/arm64/kernel/syscall_table.S
+          cat > arch/arm64/kernel/syscall_table.S << 'EOF'
 .long sys_ni_syscall    /* 223 */
 .long sys_openat2       /* 224 */
 .long sys_mount_setattr /* 225 */
 .long sys_move_mount    /* 226 */
 EOF
 
-          # syscalls.h
           grep -q sys_openat2 include/linux/syscalls.h || \
           echo 'asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);' >> include/linux/syscalls.h
 
-          # fs/Makefile
           grep -q openat2.o fs/Makefile || \
-          echo -e 'obj-y += openat2.o\nobj-y += mount_setattr.o\nobj-y += move_mount.o' >> fs/Makefile
+          echo 'obj-y += openat2.o' >> fs/Makefile
 
-      - name: Commit and Push Changes (Skip if Nothing to Commit)
+      - name: Commit and Push Changes (Skip if No Changes)
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
