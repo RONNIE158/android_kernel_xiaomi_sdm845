@@ -1,4 +1,4 @@
-name: Auto Patch Kernel for openat2, mount_setattr, and move_mount
+name: Patch Kernel Syscalls (Manual & Auto)
 
 on:
   push:
@@ -23,240 +23,62 @@ jobs:
 
           mkdir -p include/uapi/linux fs arch/arm64/kernel
 
-          # openat2
-          echo "Patching openat2..."
-          cat <<'EOF' > include/uapi/linux/openat2.h
+          # openat2.h
+          cat <<EOF > include/uapi/linux/openat2.h
 #ifndef _UAPI_LINUX_OPENAT2_H
 #define _UAPI_LINUX_OPENAT2_H
-
 struct open_how {
-    __u64 flags;
-    __u64 mode;
-    __u64 resolve;
+  __u64 flags;
+  __u64 mode;
+  __u64 resolve;
 };
-
 #endif
 EOF
 
-          cat <<'EOF' > fs/openat2.c
+          # openat2.c
+          cat <<EOF > fs/openat2.c
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/syscalls.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/openat2.h>
-
 SYSCALL_DEFINE4(openat2, int, dfd, const char __user *, filename,
                 struct open_how __user *, how, size_t, size)
 {
-    struct open_how k_how;
-
-    if (size != sizeof(struct open_how))
-        return -EINVAL;
-
-    if (copy_from_user(&k_how, how, size))
-        return -EFAULT;
-
-    return do_sys_open(dfd, filename, k_how.flags, k_how.mode);
-}
-EOF
-
-          # mount_setattr
-          echo "Patching mount_setattr..."
-          cat <<'EOF' > fs/mount_setattr.c
-// SPDX-License-Identifier: GPL-2.0
-#include <linux/syscalls.h>
-#include <linux/fs.h>
-
-SYSCALL_DEFINE5(mount_setattr, int, dfd, const char __user *, path, unsigned int, flags,
-                struct mount_attr __user *, uattr, size_t, size)
-{
-    return -ENOSYS;
-}
-EOF
-
-          cat <<'EOF' > include/uapi/linux/mount_setattr.h
-#ifndef _UAPI_LINUX_MOUNT_SETATTR_H
-#define _UAPI_LINUX_MOUNT_SETATTR_H
-
-struct mount_attr {
-    __u64 attr_set;
-    __u64 attr_clr;
-    __u64 propagation;
-    __u64 userns_fd;
-};
-name: Modular Kernel Patch Workflow
-
-on:
-  push:
-    branches:
-      - lineage-21
-  workflow_dispatch:
-
-jobs:
-  patch-kernel:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Kernel Repo
-        uses: actions/checkout@v3
-        with:
-          repository: RONNIE158/android_kernel_xiaomi_sdm845
-          ref: backport-cgroup-lxc
-
-      - name: Setup Patch Files
-        run: |
-          mkdir -p patch/syscalls
-          mkdir -p include/uapi/linux fs arch/arm64/kernel
-
-          echo 'Menyiapkan file patch syscall ke dalam folder patch/syscalls...'
-
-          cat <<'EOF' > patch/syscalls/openat2.h
-#ifndef _UAPI_LINUX_OPENAT2_H
-#define _UAPI_LINUX_OPENAT2_H
-
-struct open_how {
-    __u64 flags;
-    __u64 mode;
-    __u64 resolve;
-};
-
-#endif
-EOF
-
-          cat <<'EOF' > patch/syscalls/openat2.c
-#include <linux/syscalls.h>
-#include <linux/fs.h>
-#include <linux/uaccess.h>
-#include <linux/openat2.h>
-
-SYSCALL_DEFINE4(openat2, int, dfd, const char __user *, filename,
-                struct open_how __user *, how, size_t, size)
-{
-    struct open_how k_how;
-
-    if (size != sizeof(struct open_how))
-        return -EINVAL;
-
-    if (copy_from_user(&k_how, how, size))
-        return -EFAULT;
-
-    return do_sys_open(dfd, filename, k_how.flags, k_how.mode);
-}
-EOF
-
-          cat <<'EOF' > patch/syscalls/mount_setattr.c
-#include <linux/syscalls.h>
-#include <linux/fs.h>
-
-SYSCALL_DEFINE5(mount_setattr, int, dfd, const char __user *, path, unsigned int, flags,
-                struct mount_attr __user *, uattr, size_t, size)
-{
-    return -ENOSYS;
-}
-EOF
-
-          cat <<'EOF' > patch/syscalls/mount_setattr.h
-#ifndef _UAPI_LINUX_MOUNT_SETATTR_H
-#define _UAPI_LINUX_MOUNT_SETATTR_H
-
-struct mount_attr {
-    __u64 attr_set;
-    __u64 attr_clr;
-    __u64 propagation;
-    __u64 userns_fd;
-};
-
-#endif
-EOF
-
-          cat <<'EOF' > patch/syscalls/move_mount.c
-#include <linux/syscalls.h>
-#include <linux/fs.h>
-
-SYSCALL_DEFINE5(move_mount, int, from_dfd, const char __user *, from_pathname,
-                int, to_dfd, const char __user *, to_pathname, unsigned int, flags)
-{
-    return -ENOSYS;
-}
-EOF
-
-      - name: Apply Patch Files
-        run: |
-          echo "Menyalin file syscall..."
-          cp patch/syscalls/openat2.h include/uapi/linux/openat2.h
-          cp patch/syscalls/openat2.c fs/openat2.c
-          cp patch/syscalls/mount_setattr.c fs/mount_setattr.c
-          cp patch/syscalls/mount_setattr.h include/uapi/linux/mount_setattr.h
-          cp patch/syscalls/move_mount.c fs/move_mount.c
-
-          echo "Mengedit syscall table..."
-          echo '.long sys_openat2        /* 224 */' >> arch/arm64/kernel/syscall_table.S
-          echo '.long sys_mount_setattr  /* 225 */' >> arch/arm64/kernel/syscall_table.S
-          echo '.long sys_move_mount     /* 226 */' >> arch/arm64/kernel/syscall_table.S
-
-          echo "Menambahkan deklarasi ke syscalls.h jika belum ada..."
-          grep -q sys_openat2 include/linux/syscalls.h || cat <<'EOF' >> include/linux/syscalls.h
-
-asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);
-asmlinkage long sys_mount_setattr(int dfd, const char __user *path, unsigned int flags, struct mount_attr __user *uattr, size_t size);
-asmlinkage long sys_move_mount(int from_dfd, const char __user *from_pathname, int to_dfd, const char __user *to_pathname, unsigned int flags);
-EOF
-
-          echo "Tambahkan object .o ke Makefile jika belum ada..."
-          grep -q openat2.o fs/Makefile || echo "obj-y += openat2.o" >> fs/Makefile
-          grep -q mount_setattr.o fs/Makefile || echo "obj-y += mount_setattr.o" >> fs/Makefile
-          grep -q move_mount.o fs/Makefile || echo "obj-y += move_mount.o" >> fs/Makefile
-
-      - name: Commit and Push
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-
-          git add .
-          git diff --cached --quiet || git commit -m "Apply syscall patches: openat2, mount_setattr, move_mount"
-          git push origin backport-cgroup-lxc || true
-#endif
-EOF
-
-          # move_mount
-          echo "Patching move_mount..."
-          cat <<'EOF' > fs/move_mount.c
-// SPDX-License-Identifier: GPL-2.0
-#include <linux/syscalls.h>
-#include <linux/fs.h>
-
-SYSCALL_DEFINE5(move_mount, int, from_dfd, const char __user *, from_pathname,
-                int, to_dfd, const char __user *, to_pathname, unsigned int, flags)
-{
-    return -ENOSYS;
+  struct open_how k_how;
+  if (size != sizeof(struct open_how))
+    return -EINVAL;
+  if (copy_from_user(&k_how, how, size))
+    return -EFAULT;
+  return do_sys_open(dfd, filename, k_how.flags, k_how.mode);
 }
 EOF
 
           # syscall table
-          cat <<'EOF' > arch/arm64/kernel/syscall_table.S
-.long sys_ni_syscall     /* 223 */
-.long sys_openat2        /* 224 */
-.long sys_mount_setattr  /* 225 */
-.long sys_move_mount     /* 226 */
+          cat <<EOF > arch/arm64/kernel/syscall_table.S
+.long sys_ni_syscall    /* 223 */
+.long sys_openat2       /* 224 */
+.long sys_mount_setattr /* 225 */
+.long sys_move_mount    /* 226 */
 EOF
 
-          # patch include/linux/syscalls.h
-          grep -q sys_openat2 include/linux/syscalls.h || cat <<'EOF' >> include/linux/syscalls.h
+          # syscalls.h
+          grep -q sys_openat2 include/linux/syscalls.h || \
+          echo 'asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);' >> include/linux/syscalls.h
 
-asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);
-asmlinkage long sys_mount_setattr(int dfd, const char __user *path, unsigned int flags, struct mount_attr __user *uattr, size_t size);
-asmlinkage long sys_move_mount(int from_dfd, const char __user *from_pathname, int to_dfd, const char __user *to_pathname, unsigned int flags);
-EOF
+          # fs/Makefile
+          grep -q openat2.o fs/Makefile || \
+          echo -e 'obj-y += openat2.o\nobj-y += mount_setattr.o\nobj-y += move_mount.o' >> fs/Makefile
 
-          # Tambahkan ke Makefile jika belum ada
-          grep -q openat2.o fs/Makefile || echo "obj-y += openat2.o" >> fs/Makefile
-          grep -q mount_setattr.o fs/Makefile || echo "obj-y += mount_setattr.o" >> fs/Makefile
-          grep -q move_mount.o fs/Makefile || echo "obj-y += move_mount.o" >> fs/Makefile
-
-      - name: Commit and Push Changes
+      - name: Commit and Push Changes (Skip if Nothing to Commit)
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
+
           git add .
-          git diff --cached --quiet || git commit -m "Add openat2, mount_setattr, and move_mount syscalls"
-          git push origin backport-cgroup-lxc || true
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Patch syscall: openat2, mount_setattr, move_mount"
+            git push origin backport-cgroup-lxc
+          fi
