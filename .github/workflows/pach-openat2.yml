@@ -76,4 +76,3 @@ EOF
           else
             git commit -m "Patch syscall: openat2, mount_setattr, move_mount"
             git push origin backport-cgroup-lxc
-          fi
