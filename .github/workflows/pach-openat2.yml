@@ -3,10 +3,8 @@ name: Auto Patch Kernel for openat2 Support
 on:
   push:
     branches:
-      - lineage-21  # Ganti dengan branch yang sesuai
-  pull_request:
-    branches:
-      - backport-cgroup-lxc  # Ganti dengan branch yang sesuai
+      - lineage-21
+  workflow_dispatch:
 
 jobs:
   patch-openat2:
@@ -16,45 +14,38 @@ jobs:
       - name: Checkout Kernel Source
         uses: actions/checkout@v3
         with:
-          repository: RONNIE158/linux  # Ganti dengan repo kernel milikmu
-          ref: main  # Ganti dengan branch yang sesuai
-
-      - name: Set up Clang Toolchain
-        uses: actions/checkout@v3
-        with:
-          repository: LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b
-          path: clang
-          ref: lineage-20.0
-
-      - name: Set up GCC Toolchain
-        uses: actions/checkout@v3
-        with:
-          repository: LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9
-          path: aarch64
-          ref: lineage-19.1
+          repository: RONNIE158/android_kernel_xiaomi_sdm845
+          ref: backport-cgroup-lxc  # Branch target patch
 
       - name: Apply openat2 Patch to Kernel
         run: |
-          cd kernel
-
-          # Create openat2 patch for kernel
-          echo "Creating openat2 patch..." 
-
-          # Add header file for openat2
-          echo '#ifndef _UAPI_LINUX_OPENAT2_H
+          echo "Applying openat2 patch..."
+          # Tambah file openat2.h
+          mkdir -p include/uapi/linux
+          cat <<EOF > include/uapi/linux/openat2.h
+          #ifndef _UAPI_LINUX_OPENAT2_H
           #define _UAPI_LINUX_OPENAT2_H
           struct open_how {
               __u64 flags;
               __u64 mode;
               __u64 resolve;
           };
-          #endif' > include/uapi/linux/openat2.h
+          #endif
+          EOF
 
-          # Add syscall declaration in syscalls.h
+          # Tambah deklarasi syscall
           sed -i '/SYSCALLS/a\asmlinkage long sys_openat2(int dfd, const char __user *filename, struct open_how __user *how, size_t size);' include/linux/syscalls.h
 
-          # Implement syscall in fs/openat2.c
-          echo 'SYSCALL_DEFINE4(openat2, int, dfd, const char __user *, filename, struct open_how __user *, how, size_t, size)
+          # Tambah implementasi syscall
+          cat <<EOF > fs/openat2.c
+          // SPDX-License-Identifier: GPL-2.0
+          #include <linux/syscalls.h>
+          #include <linux/fs.h>
+          #include <linux/uaccess.h>
+          #include <linux/openat2.h>
+
+          SYSCALL_DEFINE4(openat2, int, dfd, const char __user *, filename,
+                          struct open_how __user *, how, size_t, size)
           {
               struct open_how k_how;
 
@@ -65,35 +56,19 @@ jobs:
                   return -EFAULT;
 
               return do_sys_open(dfd, filename, k_how.flags, k_how.mode);
-          }' > fs/openat2.c
+          }
+          EOF
 
-          # Add entry to syscall table
+          # Tambah entry syscall table
           sed -i '$ a\    .long sys_openat2' arch/arm64/kernel/syscall_table.S
 
-          # Update Makefile to include the new file
+          # Tambah ke Makefile
           sed -i '/obj-y += open.o/ a\obj-y += openat2.o' fs/Makefile
 
-      - name: Build Kernel
+      - name: Commit and Push Changes
         run: |
-          cd kernel
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- -j$(nproc) Image.gz-dtb
-
-      - name: Create Commit for openat2 Patch
-        run: |
-          cd kernel
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
           git add .
-          git commit -m "Add openat2 syscall support to kernel"
-
-      - name: Push Changes to Repo
-        run: |
-          cd kernel
-          git push origin main  # Ganti dengan branch yang sesuai
-
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v3
-        with:
-          title: "Add openat2 syscall support to kernel"
-          body: "Backport openat2 syscall support to kernel 4.9."
-          head: main  # Ganti dengan branch yang sesuai
-          base: main  # Ganti dengan branch yang sesuai
-          commit-message: "Add openat2 syscall support"
+          git commit -m "Add openat2 syscall support"
+          git push origin backport-cgroup-lxc
