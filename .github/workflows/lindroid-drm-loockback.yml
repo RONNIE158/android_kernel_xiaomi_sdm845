@@ -22,14 +22,25 @@ jobs:
 
       - name: Copy EVDI Files to Kernel Source
         run: |
-          mkdir -p kernel/drivers/video/fbdev/displaylink/evdi
+          mkdir -p kernel/drivers/video/fbdev/displaylink/evdi/test
           cp -r lindroid/* kernel/drivers/video/fbdev/displaylink/evdi/
 
-      - name: Add CONFIG_DRM_LINDROID_EVDI=y to beryllium_defconfig
+      - name: Add CONFIG_DRM_LINDROID_EVDI=y and KUnit Tests to beryllium_defconfig
         run: |
           DEFCONFIG="kernel/arch/arm64/configs/beryllium_defconfig"
-          CONFIG="CONFIG_DRM_LINDROID_EVDI=y"
-          grep -qxF "$CONFIG" "$DEFCONFIG" || echo "$CONFIG" >> "$DEFCONFIG"
+          for CONFIG in \
+            CONFIG_DRM_LINDROID_EVDI=y \
+            CONFIG_KUNIT=y \
+            CONFIG_KUNIT_ALL_TESTS=y \
+            CONFIG_DRM_EVDI_KUNIT_TEST=y; do
+            grep -qxF "$CONFIG" "$DEFCONFIG" || echo "$CONFIG" >> "$DEFCONFIG"
+          done
+
+      - name: Update Makefile for EVDI KUnit Test
+        run: |
+          MAKEFILE="kernel/drivers/video/fbdev/displaylink/evdi/Makefile"
+          grep -qxF 'ccflags-$(CONFIG_DRM_EVDI_KUNIT_TEST) += -I$(srctree)/drivers/gpu/drm/evdi' "$MAKEFILE" || echo 'ccflags-$(CONFIG_DRM_EVDI_KUNIT_TEST) += -I$(srctree)/drivers/gpu/drm/evdi' >> "$MAKEFILE"
+          grep -qxF 'obj-$(CONFIG_DRM_EVDI_KUNIT_TEST) += evdi_test.o test_evdi_vt_switch.o evdi_fake_user_client.o evdi_fake_compositor.o' "$MAKEFILE" || echo 'obj-$(CONFIG_DRM_EVDI_KUNIT_TEST) += evdi_test.o test_evdi_vt_switch.o evdi_fake_user_client.o evdi_fake_compositor.o' >> "$MAKEFILE"
 
       - name: Commit and Push Changes to backport-cgroup-lxc
         run: |
@@ -37,5 +48,5 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add drivers/video/fbdev/displaylink/evdi/ arch/arm64/configs/beryllium_defconfig
-          git commit -m "Apply EVDI files from Lindroid project and enable built-in in defconfig"
+          git commit -m "Apply EVDI files from Lindroid project with KUnit test and update defconfig"
           git push origin backport-cgroup-lxc
