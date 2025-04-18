@@ -20,9 +20,10 @@ jobs:
           repository: shinichi-c/lindroid-drm-loopback
           path: lindroid
 
-      - name: Copy EVDI Makefile to Kernel Source
+      - name: Copy EVDI Files to Kernel Source
         run: |
-          cp lindroid/evdi/Makefile kernel/drivers/video/fbdev/displaylink/Makefile
+          mkdir -p kernel/drivers/video/fbdev/displaylink/evdi
+          cp -r lindroid/* kernel/drivers/video/fbdev/displaylink/evdi/
 
       - name: Add CONFIG_DRM_LINDROID_EVDI=y to beryllium_defconfig
         run: |
@@ -35,6 +36,6 @@ jobs:
           cd kernel
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add drivers/video/fbdev/displaylink/Makefile arch/arm64/configs/beryllium_defconfig
-          git commit -m "Apply EVDI Makefile from Lindroid and enable built-in in defconfig"
+          git add drivers/video/fbdev/displaylink/evdi/ arch/arm64/configs/beryllium_defconfig
+          git commit -m "Apply EVDI files from Lindroid project and enable built-in in defconfig"
           git push origin backport-cgroup-lxc
