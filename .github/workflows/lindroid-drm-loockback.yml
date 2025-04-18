@@ -1,0 +1,40 @@
+name: Apply EVDI Lindroid Patch & Update Defconfig
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apply-patch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Kernel Repo (This Repo)
+        uses: actions/checkout@v3
+        with:
+          ref: backport-cgroup-lxc
+          path: kernel
+
+      - name: Checkout Lindroid DRM Loopback Repo
+        uses: actions/checkout@v3
+        with:
+          repository: shinichi-c/lindroid-drm-loopback
+          path: lindroid
+
+      - name: Copy EVDI Makefile to Kernel Source
+        run: |
+          cp lindroid/evdi/Makefile kernel/drivers/video/fbdev/displaylink/Makefile
+
+      - name: Add CONFIG_DRM_LINDROID_EVDI=y to beryllium_defconfig
+        run: |
+          DEFCONFIG="kernel/arch/arm64/configs/beryllium_defconfig"
+          CONFIG="CONFIG_DRM_LINDROID_EVDI=y"
+          grep -qxF "$CONFIG" "$DEFCONFIG" || echo "$CONFIG" >> "$DEFCONFIG"
+
+      - name: Commit and Push Changes to backport-cgroup-lxc
+        run: |
+          cd kernel
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add drivers/video/fbdev/displaylink/Makefile arch/arm64/configs/beryllium_defconfig
+          git commit -m "Apply EVDI Makefile from Lindroid and enable built-in in defconfig"
+          git push origin backport-cgroup-lxc
