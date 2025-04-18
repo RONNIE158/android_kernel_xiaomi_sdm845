@@ -23,9 +23,9 @@ jobs:
       - name: Copy EVDI Files to Kernel Source
         run: |
           mkdir -p kernel/drivers/video/fbdev/displaylink/evdi
-          cp -r lindroid/* kernel/drivers/video/fbdev/displaylink/evdi/
+          cp lindroid/* kernel/drivers/video/fbdev/displaylink/evdi/
           mkdir -p drivers/gpu/drm/evdi
-          cp -r lindroid/test/* drivers/gpu/drm/evdi/
+          cp lindroid/test/* drivers/gpu/drm/evdi/
 
       - name: Add CONFIG_DRM_LINDROID_EVDI=y to beryllium_defconfig
         run: |
