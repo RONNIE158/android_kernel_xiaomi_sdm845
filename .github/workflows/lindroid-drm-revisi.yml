@@ -20,14 +20,11 @@ jobs:
           repository: shinichi-c/lindroid-drm-loopback
           path: lindroid
 
-      - name: Copy EVDI Files to Kernel Source (with proper structure)
+      - name: Clean and Copy All EVDI Files to Kernel Source
         run: |
-          mkdir -p kernel/drivers/gpu/drm/evdi/test
-          cp lindroid/Makefile kernel/drivers/gpu/drm/evdi/Makefile
-          cp lindroid/Kconfig kernel/drivers/gpu/drm/evdi/Kconfig
-          cp lindroid/*.c kernel/drivers/gpu/drm/evdi/
-          cp lindroid/test/*.c kernel/drivers/gpu/drm/evdi/test/
-          cp lindroid/test/Makefile kernel/drivers/gpu/drm/evdi/test/Makefile
+         rm -rf kernel/drivers/gpu/drm/evdi
+         mkdir -p kernel/drivers/gpu/drm/evdi
+         cp -r lindroid/* kernel/drivers/gpu/drm/evdi/
 
       - name: Add CONFIG_DRM_LINDROID_EVDI=y and CONFIG_DRM_EVDI_KUNIT_TEST=y to defconfig
         run: |
