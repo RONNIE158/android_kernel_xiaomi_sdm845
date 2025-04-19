@@ -1,4 +1,4 @@
-name: Apply EVDI Lindroid Patch & Update Defconfig
+name: Apply EVDI Lindroid Patch revisi
 
 on:
   workflow_dispatch:
