@@ -1,1 +1,63 @@
-1
+
+name: Patch and Test Kernel with EVDI + KUnit
+
+on:
+  workflow_dispatch:
+
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout kernel source
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Create testing branch
+      run: |
+        git config user.name "kernel-bot"
+        git config user.email "kernel-bot@github"
+        git checkout -b test/evdi-drm-kunit
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev dwarves python3 python3-pip
+        pip3 install --user -r ./tools/testing/kunit/requirements.txt
+
+    - name: Clone EVDI DRM (Linux-on-droid)
+      run: |
+        git clone https://github.com/Linux-on-droid/lindroid-drm-loopback.git evdi
+
+    - name: Apply evdi patch to drivers/gpu/drm
+      run: |
+        mkdir -p drivers/gpu/drm/evdi
+        cp -r evdi/module/* drivers/gpu/drm/evdi/
+        echo 'obj-$(CONFIG_DRM_EVDI) += evdi/' >> drivers/gpu/drm/Makefile
+
+    - name: Update Kconfig and defconfig
+      run: |
+        echo -e '\nsource "drivers/gpu/drm/evdi/Kconfig"' >> drivers/gpu/drm/Kconfig
+        echo -e '\nCONFIG_KUNIT=y\nCONFIG_KUNIT_ALL_TESTS=y\nCONFIG_KUNIT_EXAMPLE_TEST=y\nCONFIG_DEBUG_KERNEL=y\nCONFIG_KPROBES=y\nCONFIG_DRM=y\nCONFIG_DRM_EVDI=m' >> arch/arm64/configs/lineage_defconfig
+
+    - name: Compile Kernel (dry run build)
+      run: |
+        make ARCH=arm64 CC=clang O=out lineage_defconfig
+        make ARCH=arm64 CC=clang O=out -j$(nproc)
+
+    - name: Run KUnit tests
+      run: |
+        ./tools/testing/kunit/kunit.py run --timeout=300
+
+    - name: Upload KUnit test logs
+      uses: actions/upload-artifact@v3
+      with:
+        name: kunit-logs
+        path: ./tools/testing/kunit/test.log
+
+    - name: Commit and push changes
+      run: |
+        git add .
+        git commit -m "Add EVDI DRM driver and enable KUnit testing"
+        git push origin test/evdi-drm-kunit
