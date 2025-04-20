@@ -1,0 +1,49 @@
+name: Apply EVDI Lindroid Patch revisi
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apply-patch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Kernel Repo (This Repo)
+        uses: actions/checkout@v3
+        with:
+          ref: backport-cgroup-lxc
+          path: kernel
+
+      - name: Checkout Lindroid DRM Loopback Repo
+        uses: actions/checkout@v3
+        with:
+          repository: shinichi-c/lindroid-drm-loopback
+          path: lindroid
+
+      - name: Clean and Copy All EVDI Files to Kernel Source
+        run: |
+         rm -rf kernel/drivers/gpu/drm/evdi
+         mkdir -p kernel/drivers/gpu/drm/evdi
+         cp -r lindroid/* kernel/drivers/gpu/drm/evdi/
+
+      - name: Add CONFIG_DRM_LINDROID_EVDI=y and CONFIG_DRM_EVDI_KUNIT_TEST=y to defconfig
+        run: |
+          DEFCONFIG="kernel/arch/arm64/configs/beryllium_defconfig"
+          for CONFIG in CONFIG_DRM_LINDROID_EVDI CONFIG_DRM_EVDI_KUNIT_TEST; do
+            grep -qxF "$CONFIG=y" "$DEFCONFIG" || echo "$CONFIG=y" >> "$DEFCONFIG"
+          done
+
+      - name: Ensure evdi Kconfig is included in DRM Kconfig
+        run: |
+          DRM_KCONFIG="kernel/drivers/gpu/drm/Kconfig"
+          LINE='source "drivers/gpu/drm/evdi/Kconfig"'
+          grep -qxF "$LINE" "$DRM_KCONFIG" || echo "$LINE" >> "$DRM_KCONFIG"
+
+      - name: Commit and Push Changes to backport-cgroup-lxc
+        run: |
+          cd kernel
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add drivers/gpu/drm/evdi/ arch/arm64/configs/beryllium_defconfig drivers/gpu/drm/Kconfig
+          git commit -m "Apply EVDI files from Lindroid project with KUnit test support and Kconfig inclusion"
+          git push origin backport-cgroup-lxc
