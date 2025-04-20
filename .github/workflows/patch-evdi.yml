@@ -12,7 +12,7 @@ jobs:
       uses: actions/checkout@v4
       with:
         repository: RONNIE158/android_kernel_xiaomi_sdm845
-        token: ${{ repo }}
+        token: ${{ secrets.GH_TOKEN }}
         ref: lineage-21
         fetch-depth: 0
 
