@@ -51,10 +51,10 @@ jobs:
         ./tools/testing/kunit/kunit.py run --timeout=300
 
     - name: Upload KUnit test logs
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: kunit-logs
-        path: ./tools/testing/kunit/test.log
+       name: kunit-logs
+       path: ./tools/testing/kunit/test.log
 
     - name: Commit and push changes
       run: |
