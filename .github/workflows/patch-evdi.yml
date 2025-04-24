@@ -1,45 +1,43 @@
-name: Patch Lindroid DRM Loopback
+name: Direct Patch DRM Loopback to drm-test
 
 on:
   workflow_dispatch:
 
 jobs:
-  patch-evdi:
+  patch-drm-loopback:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Kernel Repo
-      uses: actions/checkout@v4
-      with:
-        repository: RONNIE158/android_kernel_xiaomi_sdm845
-        token: ${{ secrets.GH_TOKEN }}
-        ref: lineage-21
-        fetch-depth: 0
+      - name: Checkout Kernel Repo (drm-test)
+        uses: actions/checkout@v3
+        with:
+          ref: drm-test
+          fetch-depth: 0
 
-    - name: Create new branch
-      run: git checkout -b lindroid-drm-loopback
+      - name: Set up Git user
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
 
-    - name: Clone EVDI DRM Loopback Repo
-      run: |
-        git clone https://github.com/Linux-on-droid/lindroid-drm-loopback.git evdi-src
+      - name: Clone drm-loopback
+        run: |
+          git clone --depth=1 https://github.com/yaahallo/drm-loopback loopback-src
+          mkdir -p drivers/gpu/drm/drm-loopback
+          cp loopback-src/*.c drivers/gpu/drm/drm-loopback/
+          cp loopback-src/Makefile drivers/gpu/drm/drm-loopback/
+          cp loopback-src/Kconfig  drivers/gpu/drm/drm-loopback/
 
-    - name: Copy EVDI DRM Driver
-      run: |
-        mkdir -p drivers/gpu/drm/evdi
-        cp -r evdi-src/* drivers/gpu/drm/evdi/
+      - name: Tambah ke Kconfig dan Makefile
+        run: |
+          grep -q 'drm-loopback/Kconfig' drivers/gpu/drm/Kconfig || \
+            echo 'source "drivers/gpu/drm/drm-loopback/Kconfig"' >> drivers/gpu/drm/Kconfig
 
-    - name: Update DRM Kconfig
-      run: echo 'source "drivers/gpu/drm/evdi/Kconfig"' >> drivers/gpu/drm/Kconfig
+          grep -q 'drm-loopback/' drivers/gpu/drm/Makefile || \
+            echo 'obj-\$(CONFIG_DRM_LOOPBACK) += drm-loopback/' >> drivers/gpu/drm/Makefile
 
-    - name: Update DRM Makefile
-      run: echo 'obj-$(CONFIG_DRM_EVDI) += evdi/' >> drivers/gpu/drm/Makefile
-
-    - name: Commit changes
-      run: |
-        git config user.name "github-actions"
-        git config user.email "actions@github.com"
-        git add .
-        git commit -m "Add Lindroid DRM Loopback (EVDI-based) driver"
-
-    - name: Push new branch
-      run: git push origin lindroid-drm-loopback
+      - name: Commit dan Push
+        run: |
+          git add drivers/gpu/drm/drm-loopback
+          git add drivers/gpu/drm/Kconfig drivers/gpu/drm/Makefile
+          git commit -m "Add DRM Loopback driver"
+          git push
