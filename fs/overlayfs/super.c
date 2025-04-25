@@ -422,9 +422,7 @@ static bool ovl_dentry_remote(struct dentry *dentry)
 static bool ovl_dentry_weird(struct dentry *dentry)
 {
 	return dentry->d_flags & (DCACHE_NEED_AUTOMOUNT |
-				  DCACHE_MANAGE_TRANSIT |
-				  DCACHE_OP_HASH |
-				  DCACHE_OP_COMPARE);
+				  DCACHE_MANAGE_TRANSIT);
 }
 
 static inline struct dentry *ovl_lookup_real(struct dentry *dir,
