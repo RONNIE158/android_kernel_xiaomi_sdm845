@@ -5,12 +5,12 @@
 menu "Graphics support"
 	depends on HAS_IOMEM
 
-menuconfig FB_VIRTUAL
-    bool "Virtual Framebuffer"
+config VIRT_FB_VNC
+    bool "Virtual Framebuffer + VNC"
     default y
     help
-      Minimal virtual framebuffer for headless Android.
-      Can be built-in (y) or module (m).
+      Hybrid Virtual framebuffer untuk headless Android.
+      Bisa streaming via VNC.
 
 config HAVE_FB_ATMEL
 	bool
