@@ -137,7 +137,7 @@ jobs:
         CROSS_COMPILE: aarch64-linux-android-
         PATH: /usr/bin:$PATH
       run: |
-        make O=out ARCH=arm64 lineage_defconfig
+        make O=out ARCH=arm64 beryllium_defconfig
         make O=out ARCH=arm64 drivers/gpu/kgsl-vnc/ -j$(nproc)
         mkdir -p ../kgsl-vnc-output
         find out -name "*.ko" -exec cp {} ../kgsl-vnc-output/ \;
