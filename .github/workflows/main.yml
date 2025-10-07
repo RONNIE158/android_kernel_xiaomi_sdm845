@@ -20,6 +20,19 @@ jobs:
         sudo apt update
         sudo apt install -y clang llvm lld bc bison flex libncurses5-dev libssl-dev ccache git wget
 
+    - name: 🔽 Download LineageOS Toolchains
+      run: |
+        cd toolchains
+        # Download Clang & GCC dari LineageOS
+        wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master/clang-r416183b.tar.gz -O clang.tar.gz
+        tar -xzf clang.tar.gz
+        mkdir -p gcc64 gcc32
+        wget https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/heads/master.tar.gz -O gcc64.tar.gz
+        wget https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/heads/master.tar.gz -O gcc32.tar.gz
+        tar -xzf gcc64.tar.gz -C gcc64
+        tar -xzf gcc32.tar.gz -C gcc32
+
+    
     - name: ⚙️ Inject KGSL VNC Display patch
       working-directory: kernel
       run: |
