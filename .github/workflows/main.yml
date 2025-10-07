@@ -8,6 +8,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+    # 1️⃣ Checkout kernel
     - name: 🧩 Checkout kernel source
       uses: actions/checkout@v4
       with:
@@ -15,11 +16,13 @@ jobs:
         ref: lineage-21
         path: kernel
 
+    # 2️⃣ Setup environment
     - name: 🧰 Setup build environment
       run: |
         sudo apt update
-        sudo apt install -y clang llvm lld bc bison flex libncurses5-dev libssl-dev ccache git wget
+        sudo apt install -y clang llvm lld bc bison flex libncurses5-dev libssl-dev ccache git wget curl
 
+    # 3️⃣ Pull toolchain LineageOS
     - name: 🔽 Pull LineageOS Toolchains
       run: |
         mkdir -p toolchains
@@ -29,119 +32,110 @@ jobs:
         mkdir clang
         curl https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android14-dev/clang-r487747c.tar.gz -RLO
         tar -C clang/ -xf clang-*.tar.gz
-        echo "Toolchains ready"
+        echo "✅ Toolchains ready"
 
-    
-    - name: ⚙️ Inject KGSL VNC Display patch
+    # 4️⃣ Inject driver KGSL VNC
+    - name: ⚙️ Inject KGSL VNC Display Driver
       working-directory: kernel
       run: |
         mkdir -p drivers/gpu/kgsl-vnc
+
+        # Driver source
         cat > drivers/gpu/kgsl-vnc/kgsl_vnc_display.c <<'EOF'
-        #include <linux/module.h>
-        #include <linux/kernel.h>
-        #include <linux/kthread.h>
-        #include <linux/net.h>
-        #include <linux/in.h>
-        #include <linux/slab.h>
-        #include <linux/delay.h>
-        #include <linux/kgsl.h>
-        #include <linux/mm.h>
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/kthread.h>
+#include <linux/net.h>
+#include <linux/in.h>
+#include <linux/slab.h>
+#include <linux/delay.h>
+#include <linux/kgsl.h>
+#include <linux/mm.h>
 
-        #define VNC_PORT 5900
+#define VNC_PORT 5900
 
-        static struct socket *vnc_sock;
-        static struct task_struct *vnc_thread;
-        static int vnc_running = 1;
+static struct socket *vnc_sock;
+static struct task_struct *vnc_thread;
+static int vnc_running = 1;
 
-        static int vnc_stream_thread(void *data)
-        {
-            struct sockaddr_in saddr;
-            int ret;
+static int vnc_stream_thread(void *data)
+{
+    struct sockaddr_in saddr;
+    int ret;
 
-            ret = sock_create(AF_INET, SOCK_STREAM, IPPROTO_TCP, &vnc_sock);
-            if (ret < 0) {
-                pr_err("kgsl_vnc: socket create failed\n");
-                return ret;
-            }
+    ret = sock_create(AF_INET, SOCK_STREAM, IPPROTO_TCP, &vnc_sock);
+    if (ret < 0) { pr_err("kgsl_vnc: socket create failed\n"); return ret; }
 
-            saddr.sin_family = AF_INET;
-            saddr.sin_addr.s_addr = htonl(INADDR_ANY);
-            saddr.sin_port = htons(VNC_PORT);
+    saddr.sin_family = AF_INET;
+    saddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    saddr.sin_port = htons(VNC_PORT);
 
-            ret = vnc_sock->ops->bind(vnc_sock, (struct sockaddr *)&saddr, sizeof(saddr));
-            if (ret < 0) {
-                pr_err("kgsl_vnc: bind failed\n");
-                goto out;
-            }
+    ret = vnc_sock->ops->bind(vnc_sock, (struct sockaddr *)&saddr, sizeof(saddr));
+    if (ret < 0) { pr_err("kgsl_vnc: bind failed\n"); goto out; }
 
-            ret = vnc_sock->ops->listen(vnc_sock, 1);
-            if (ret < 0) {
-                pr_err("kgsl_vnc: listen failed\n");
-                goto out;
-            }
+    ret = vnc_sock->ops->listen(vnc_sock, 1);
+    if (ret < 0) { pr_err("kgsl_vnc: listen failed\n"); goto out; }
 
-            pr_info("kgsl_vnc: waiting for client on port %d...\n", VNC_PORT);
+    pr_info("kgsl_vnc: waiting for client on port %d...\n", VNC_PORT);
 
+    while (vnc_running) {
+        struct socket *client = NULL;
+        ret = vnc_sock->ops->accept(vnc_sock, &client, O_NONBLOCK);
+        if (ret == 0 && client) {
+            pr_info("kgsl_vnc: client connected\n");
             while (vnc_running) {
-                struct socket *client = NULL;
-                ret = vnc_sock->ops->accept(vnc_sock, &client, O_NONBLOCK);
-                if (ret == 0 && client) {
-                    pr_info("kgsl_vnc: client connected\n");
-
-                    while (vnc_running) {
-                        char fb_data[1024];
-                        memset(fb_data, 0x55, sizeof(fb_data)); // dummy frame
-                        kernel_sendmsg(client, &(struct msghdr){},
-                            (struct kvec[]){{.iov_base = fb_data, .iov_len = sizeof(fb_data)}},
-                            1, sizeof(fb_data));
-                        msleep(33);
-                    }
-                    sock_release(client);
-                }
-                msleep(100);
+                char fb_data[1024];
+                memset(fb_data, 0x55, sizeof(fb_data));
+                kernel_sendmsg(client, &(struct msghdr){}, (struct kvec[]){{.iov_base = fb_data, .iov_len = sizeof(fb_data)}}, 1, sizeof(fb_data));
+                msleep(33);
             }
-
-        out:
-            sock_release(vnc_sock);
-            return 0;
+            sock_release(client);
         }
+        msleep(100);
+    }
 
-        static int __init kgsl_vnc_init(void)
-        {
-            pr_info("kgsl_vnc: init\n");
-            vnc_thread = kthread_run(vnc_stream_thread, NULL, "kgsl_vnc_stream");
-            if (IS_ERR(vnc_thread))
-                return PTR_ERR(vnc_thread);
-            return 0;
-        }
+out:
+    sock_release(vnc_sock);
+    return 0;
+}
 
-        static void __exit kgsl_vnc_exit(void)
-        {
-            vnc_running = 0;
-            if (vnc_thread)
-                kthread_stop(vnc_thread);
-            pr_info("kgsl_vnc: exit\n");
-        }
+static int __init kgsl_vnc_init(void)
+{
+    pr_info("kgsl_vnc: init\n");
+    vnc_thread = kthread_run(vnc_stream_thread, NULL, "kgsl_vnc_stream");
+    if (IS_ERR(vnc_thread)) return PTR_ERR(vnc_thread);
+    return 0;
+}
 
-        module_init(kgsl_vnc_init);
-        module_exit(kgsl_vnc_exit);
-        MODULE_LICENSE("GPL");
-        MODULE_DESCRIPTION("KGSL Virtual Display Stream via VNC (Dummy)");
-        MODULE_AUTHOR("Bro Project");
-        EOF
+static void __exit kgsl_vnc_exit(void)
+{
+    vnc_running = 0;
+    if (vnc_thread) kthread_stop(vnc_thread);
+    pr_info("kgsl_vnc: exit\n");
+}
 
+module_init(kgsl_vnc_init);
+module_exit(kgsl_vnc_exit);
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("KGSL Virtual Display Stream via VNC (Dummy)");
+MODULE_AUTHOR("Bro Project");
+EOF
+
+        # Makefile
         echo "obj-m += kgsl_vnc_display.o" > drivers/gpu/kgsl-vnc/Makefile
+        # Kconfig
         echo "source \"drivers/gpu/kgsl-vnc/Kconfig\"" >> drivers/gpu/Kconfig
         cat > drivers/gpu/kgsl-vnc/Kconfig <<'EOF'
-        config KGSL_VNC_DISPLAY
-            tristate "KGSL VNC Display Streamer"
-            depends on MSM_KGSL_DRM
-            default n
-            help
-              Stream framebuffer via TCP (VNC placeholder)
-        EOF
+config KGSL_VNC_DISPLAY
+    tristate "KGSL VNC Display Streamer"
+    depends on MSM_KGSL_DRM
+    default n
+    help
+      Stream framebuffer via TCP (VNC placeholder)
+EOF
 
-    - name: 🧱 Build module
+    # 5️⃣ Build driver module + cek
+    - name: 🧱 Build & Check KGSL VNC Module
       working-directory: kernel
       env:
         ARCH: arm64
@@ -156,6 +150,16 @@ jobs:
         mkdir -p ../kgsl-vnc-output
         find out -name "*.ko" -exec cp {} ../kgsl-vnc-output/ \;
 
+        # ✅ Cek modul berhasil dibuat
+        if [ -f ../kgsl-vnc-output/kgsl_vnc_display.ko ]; then
+          echo "✅ Modul kgsl_vnc_display.ko berhasil dibuat"
+          ls -lh ../kgsl-vnc-output/
+        else
+          echo "❌ Modul kgsl_vnc_display.ko tidak ditemukan!"
+          exit 1
+        fi
+
+    # 6️⃣ Upload artifact
     - name: 📦 Upload module artifact
       uses: actions/upload-artifact@v4
       with:
