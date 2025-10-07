@@ -1,4 +1,4 @@
-// drivers/video/fb_virtual.c
+// drivers/video/fb_virtual/fb_virtual.c
 #include <linux/module.h>
 #include <linux/fb.h>
 #include <linux/init.h>
@@ -12,7 +12,7 @@ static int __init virt_fb_init(void)
     if (!virt_fbinfo)
         return -ENOMEM;
 
-    virt_fbinfo->screen_base = vzalloc(1920*1080*4); // 1080p RGBA
+    virt_fbinfo->screen_base = vzalloc(1920*1080*4);
     if (!virt_fbinfo->screen_base) {
         framebuffer_release(virt_fbinfo);
         return -ENOMEM;
@@ -40,4 +40,4 @@ module_exit(virt_fb_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Bro");
-MODULE_DESCRIPTION("Minimal Virtual Framebuffer for Headless Android");
+MODULE_DESCRIPTION("Hybrid Virtual Framebuffer for Headless Android");
