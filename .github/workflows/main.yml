@@ -20,18 +20,16 @@ jobs:
         sudo apt update
         sudo apt install -y clang llvm lld bc bison flex libncurses5-dev libssl-dev ccache git wget
 
-    - name: 🔽 Download LineageOS Toolchains
+    - name: 🔽 Pull LineageOS Toolchains
       run: |
-        mkdir -p toolchains gcc64 gcc32
+        mkdir -p toolchains
         cd toolchains
-        # Download Clang & GCC dari LineageOS
-        wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master/clang-r416183b.tar.gz -O clang.tar.gz
-        tar -xzf clang.tar.gz
-        mkdir -p gcc64 gcc32
-        wget https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/heads/master.tar.gz -O gcc64.tar.gz
-        wget https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/heads/master.tar.gz -O gcc32.tar.gz
-        tar -xzf gcc64.tar.gz -C gcc64
-        tar -xzf gcc32.tar.gz -C gcc32
+        git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
+        git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
+        mkdir clang
+        curl https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android14-dev/clang-r487747c.tar.gz -RLO
+        tar -C clang/ -xf clang-*.tar.gz
+        echo "Toolchains ready"
 
     
     - name: ⚙️ Inject KGSL VNC Display patch
@@ -148,8 +146,10 @@ jobs:
       env:
         ARCH: arm64
         SUBARCH: arm64
-        CROSS_COMPILE: aarch64-linux-android-
-        PATH: /usr/bin:$PATH
+        PATH: ${{ github.workspace }}/toolchains/clang/bin:$PATH
+        CROSS_COMPILE: ${{ github.workspace }}/toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-android-
+        CROSS_COMPILE_ARM32: ${{ github.workspace }}/toolchains/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-
+        CC: clang
       run: |
         make O=out ARCH=arm64 beryllium_defconfig
         make O=out ARCH=arm64 drivers/gpu/kgsl-vnc/ -j$(nproc)
