@@ -130,7 +130,11 @@ static int vnc_stream_thread(void *data)
 
     while (vnc_running) {
         client = NULL;
-        ret = vnc_sock->ops->accept(vnc_sock, &client, O_NONBLOCK);
+
+        /* ===== FIX pointer type accept ===== */
+        ret = vnc_sock->ops->accept(vnc_sock, (struct socket **)&client, O_NONBLOCK);
+        /* ================================== */
+
         if (ret == 0 && client) {
             pr_info("virt_fb_vnc: client connected\n");
 
