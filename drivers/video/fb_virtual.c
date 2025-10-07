@@ -105,7 +105,7 @@ static int vnc_stream_thread(void *data)
 {
     struct sockaddr_in saddr;
     struct socket *client = NULL;
-    struct socket *tmp_client;
+    struct socket *tmp_client = NULL;
     int ret;
     int fb_size;
 
@@ -133,7 +133,7 @@ static int vnc_stream_thread(void *data)
         tmp_client = NULL;
 
         /* fix pointer type accept untuk kernel 4.9 */
-        ret = vnc_sock->ops->accept(vnc_sock, tmp_client, O_NONBLOCK);
+        ret = vnc_sock->ops->accept(vnc_sock, &tmp_client, O_NONBLOCK);
         if (ret == 0 && tmp_client) {
             client = tmp_client;
             pr_info("virt_fb_vnc: client connected\n");
