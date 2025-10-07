@@ -1,7 +1,7 @@
 config KGSL_VNC_DISPLAY
     tristate "KGSL VNC Display Streamer"
-    depends on MSM_KGSL_DRM
-    default y
+    depends on MSM_KGSL_DRM && NET
+    default n
     help
-      Stream framebuffer via TCP (VNC placeholder)
-      This module provides a dummy VNC framebuffer streamer using KGSL.
+      Stream framebuffer via TCP (VNC placeholder).
+      Say Y to compile into the kernel, M to build as module, N to disable.
