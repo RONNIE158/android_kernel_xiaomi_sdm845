@@ -209,8 +209,6 @@ config INPUT_KEYCOMBO
 
 comment "Input Device Drivers"
 
-source "drivers/input/uinput_touch/Kconfig"
-
 source "drivers/input/keyboard/Kconfig"
 
 source "drivers/input/mouse/Kconfig"
