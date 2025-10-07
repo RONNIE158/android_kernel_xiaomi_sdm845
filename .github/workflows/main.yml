@@ -22,6 +22,7 @@ jobs:
 
     - name: 🔽 Download LineageOS Toolchains
       run: |
+        mkdir -p toolchains gcc64 gcc32
         cd toolchains
         # Download Clang & GCC dari LineageOS
         wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master/clang-r416183b.tar.gz -O clang.tar.gz
