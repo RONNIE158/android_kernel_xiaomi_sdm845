@@ -5,6 +5,13 @@
 menu "Input device support"
 	depends on !UML
 
+menuconfig INPUT_UVIRTUAL_TOUCH
+    bool "Virtual Touch Input"
+    default y
+    help
+      Minimal virtual touchscreen input device for headless Android.
+      Can be built-in (y) or module (m).
+
 config INPUT
 	tristate "Generic input layer (needed for keyboard, mouse, ...)" if EXPERT
 	default y
