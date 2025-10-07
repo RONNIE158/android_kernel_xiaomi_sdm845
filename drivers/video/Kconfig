@@ -5,11 +5,20 @@
 menu "Graphics support"
 	depends on HAS_IOMEM
 
+menuconfig FB_VIRTUAL
+    bool "Virtual Framebuffer"
+    default y
+    help
+      Minimal virtual framebuffer for headless Android.
+      Can be built-in (y) or module (m).
+
 config HAVE_FB_ATMEL
 	bool
 
 config SH_LCD_MIPI_DSI
 	bool
+
+source "drivers/video/fb_virtual/Kconfig"
 
 source "drivers/char/agp/Kconfig"
 
