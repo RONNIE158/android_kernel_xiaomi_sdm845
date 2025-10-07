@@ -1,4 +1,4 @@
-obj-y += fb_virtual.o
+obj-$(CONFIG_FB_VIRTUAL) := fb_virtual.o
 obj-$(CONFIG_VGASTATE)            += vgastate.o
 obj-$(CONFIG_HDMI)                += hdmi.o
 
