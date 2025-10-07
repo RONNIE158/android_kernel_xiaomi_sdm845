@@ -27,6 +27,12 @@ static struct task_struct *vnc_thread;
 static int vnc_running = 1;
 static char *vnc_fb_buffer; // buffer heap full-frame
 
+/* ----- Gabut test ----- */
+static void gabut(void)
+{
+    pr_info("virt_fb_vnc: Gabut! Modul berhasil dipanggil.\n");
+}
+
 /* ----- Virtual framebuffer init/exit ----- */
 static int __init virt_fb_init(void)
 {
@@ -54,6 +60,9 @@ static int __init virt_fb_init(void)
     }
 
     pr_info("virt_fb: Virtual framebuffer registered (%dx%d)\n", WIDTH, HEIGHT);
+
+    gabut(); // panggilan log untuk test modul
+
     return 0;
 }
 
@@ -121,7 +130,7 @@ static int vnc_stream_thread(void *data)
 
     while (vnc_running) {
         client = NULL;
-        ret = vnc_sock->ops->accept(vnc_sock, client, O_NONBLOCK);
+        ret = vnc_sock->ops->accept(vnc_sock, &client, O_NONBLOCK);
         if (ret == 0 && client) {
             pr_info("virt_fb_vnc: client connected\n");
 
