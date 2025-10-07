@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Hybrid Virtual Framebuffer + VNC streamer (optimized)
+ * Hybrid Virtual Framebuffer + VNC streamer
  * Author: Bro
  * Description: Virtual framebuffer untuk headless Android, bisa di-VNC-kan real-time
- * Note: VNC streaming pakai tile/strip untuk aman RAM
  */
 
 #include <linux/module.h>
@@ -21,18 +20,17 @@
 #define WIDTH 1920
 #define HEIGHT 1080
 #define BPP 32
-#define TILE_SIZE 65536 // 64KB per paket VNC
 
 static struct fb_info *virt_fbinfo;
 static struct socket *vnc_sock;
 static struct task_struct *vnc_thread;
 static int vnc_running = 1;
-static char *vnc_tile_buffer; // buffer tile untuk VNC
+static char *vnc_fb_buffer; // buffer heap full-frame
 
 /* ----- Virtual framebuffer init/exit ----- */
 static int __init virt_fb_init(void)
 {
-    int ret = 0;
+    int ret;
 
     virt_fbinfo = framebuffer_alloc(0, NULL);
     if (!virt_fbinfo)
@@ -67,7 +65,7 @@ static void __exit virt_fb_exit(void)
 }
 
 /* ----- Ambil buffer framebuffer ----- */
-static void fb_get_framebuffer_tile(size_t offset, char *buf, size_t size)
+static void fb_get_framebuffer(char *buf, size_t size)
 {
     size_t copy_size;
 
@@ -76,8 +74,8 @@ static void fb_get_framebuffer_tile(size_t offset, char *buf, size_t size)
         return;
     }
 
-    copy_size = min(size, (size_t)(virt_fbinfo->fix.smem_len - offset));
-    memcpy(buf, virt_fbinfo->screen_base + offset, copy_size);
+    copy_size = min(size, (size_t)virt_fbinfo->fix.smem_len);
+    memcpy(buf, virt_fbinfo->screen_base, copy_size);
 }
 
 /* ----- Input virtual (dummy) ----- */
@@ -98,11 +96,13 @@ static int vnc_stream_thread(void *data)
 {
     struct sockaddr_in saddr;
     struct socket *client;
-    int ret = 0;
-    size_t offset;
+    int ret;
+    int fb_size;
 
-    vnc_tile_buffer = kmalloc(TILE_SIZE, GFP_KERNEL);
-    if (!vnc_tile_buffer)
+    fb_size = WIDTH * HEIGHT * (BPP/8);
+
+    vnc_fb_buffer = kmalloc(fb_size, GFP_KERNEL);
+    if (!vnc_fb_buffer)
         return -ENOMEM;
 
     ret = sock_create(AF_INET, SOCK_STREAM, IPPROTO_TCP, &vnc_sock);
@@ -121,19 +121,16 @@ static int vnc_stream_thread(void *data)
 
     while (vnc_running) {
         client = NULL;
-        ret = vnc_sock->ops->accept(vnc_sock, &client, O_NONBLOCK);
+        ret = vnc_sock->ops->accept(vnc_sock, client, O_NONBLOCK);
         if (ret == 0 && client) {
             pr_info("virt_fb_vnc: client connected\n");
 
             while (vnc_running) {
-                for (offset = 0; offset < WIDTH * HEIGHT * (BPP/8); offset += TILE_SIZE) {
-                    fb_get_framebuffer_tile(offset, vnc_tile_buffer, TILE_SIZE);
+                fb_get_framebuffer(vnc_fb_buffer, fb_size);
 
-                    kernel_sendmsg(client, &(struct msghdr){0},
-                                   (struct kvec[]){{.iov_base = vnc_tile_buffer,
-                                                    .iov_len = TILE_SIZE}},
-                                   1, TILE_SIZE);
-                }
+                kernel_sendmsg(client, &(struct msghdr){0},
+                               (struct kvec[]){{.iov_base = vnc_fb_buffer, .iov_len = fb_size}},
+                               1, fb_size);
 
                 handle_client_input_virtual(client);
                 msleep(33); // ~30fps
@@ -148,7 +145,7 @@ out_sock:
     if (vnc_sock)
         sock_release(vnc_sock);
 out_free:
-    kfree(vnc_tile_buffer);
+    kfree(vnc_fb_buffer);
     return ret;
 }
 
@@ -180,4 +177,4 @@ module_exit(virt_fb_vnc_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Bro");
-MODULE_DESCRIPTION("Hybrid Virtual Framebuffer + VNC streamer for Android headless (optimized)");
+MODULE_DESCRIPTION("Hybrid Virtual Framebuffer + VNC streamer for Android headless");
