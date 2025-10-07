@@ -29,6 +29,8 @@ static int vnc_running = 1;
 /* ----- Virtual framebuffer init/exit ----- */
 static int __init virt_fb_init(void)
 {
+    int ret = 0;
+
     virt_fbinfo = framebuffer_alloc(0, NULL);
     if (!virt_fbinfo)
         return -ENOMEM;
@@ -44,7 +46,12 @@ static int __init virt_fb_init(void)
     virt_fbinfo->var.yres = HEIGHT;
     virt_fbinfo->var.bits_per_pixel = BPP;
 
-    register_framebuffer(virt_fbinfo);
+    ret = register_framebuffer(virt_fbinfo);
+    if (ret < 0) {
+        framebuffer_release(virt_fbinfo);
+        return ret;
+    }
+
     pr_info("virt_fb: Virtual framebuffer registered (%dx%d)\n", WIDTH, HEIGHT);
     return 0;
 }
@@ -59,12 +66,14 @@ static void __exit virt_fb_exit(void)
 /* ----- Ambil buffer framebuffer ----- */
 static void fb_get_framebuffer(char *buf, size_t size)
 {
+    size_t copy_size;
+
     if (!virt_fbinfo || !virt_fbinfo->screen_base) {
         memset(buf, 0xFF, size); // fallback
         return;
     }
 
-    size_t copy_size = min(size, (size_t)virt_fbinfo->fix.smem_len);
+    copy_size = min(size, (size_t)virt_fbinfo->fix.smem_len);
     memcpy(buf, virt_fbinfo->screen_base, copy_size);
 }
 
@@ -74,7 +83,7 @@ static void handle_client_input_virtual(struct socket *client)
     char buf[256];
     int ret;
 
-    ret = kernel_recvmsg(client, &(struct msghdr){},
+    ret = kernel_recvmsg(client, &(struct msghdr){0},
                          (struct kvec[]){{.iov_base = buf, .iov_len = sizeof(buf)}},
                          1, sizeof(buf), MSG_DONTWAIT);
     if (ret > 0)
@@ -86,6 +95,7 @@ static int vnc_stream_thread(void *data)
 {
     struct sockaddr_in saddr;
     int ret;
+    struct socket *client;
 
     ret = sock_create(AF_INET, SOCK_STREAM, IPPROTO_TCP, &vnc_sock);
     if (ret < 0) return ret;
@@ -102,8 +112,8 @@ static int vnc_stream_thread(void *data)
     pr_info("virt_fb_vnc: waiting for client on port %d...\n", VNC_PORT);
 
     while (vnc_running) {
-        struct socket *client = NULL;
-        ret = vnc_sock->ops->accept(vnc_sock, &client, O_NONBLOCK);
+        client = NULL;
+        ret = kernel_accept(vnc_sock, &client, O_NONBLOCK);
         if (ret == 0 && client) {
             pr_info("virt_fb_vnc: client connected\n");
 
@@ -111,7 +121,7 @@ static int vnc_stream_thread(void *data)
                 char fb_data[4096];
                 fb_get_framebuffer(fb_data, sizeof(fb_data));
 
-                kernel_sendmsg(client, &(struct msghdr){},
+                kernel_sendmsg(client, &(struct msghdr){0},
                                (struct kvec[]){{.iov_base = fb_data, .iov_len = sizeof(fb_data)}},
                                1, sizeof(fb_data));
 
