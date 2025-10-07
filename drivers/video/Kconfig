@@ -18,7 +18,6 @@ config HAVE_FB_ATMEL
 config SH_LCD_MIPI_DSI
 	bool
 
-source "drivers/video/fb_virtual/Kconfig"
 
 source "drivers/char/agp/Kconfig"
 
