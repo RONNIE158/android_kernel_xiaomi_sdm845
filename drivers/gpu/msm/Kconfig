@@ -1,11 +1,3 @@
-config KGSL_VNC_DISPLAY
-    tristate "KGSL VNC Display Streamer"
-    depends on MSM_KGSL_DRM && NET
-    default y
-    help
-      Stream framebuffer via TCP (VNC placeholder).
-      Say Y to compile into the kernel, M to build as module, N to disable.
-
 config QCOM_KGSL
 	tristate "Qualcomm Technologies, Inc. 3D Graphics driver"
 	default n
