@@ -104,7 +104,8 @@ static void handle_client_input_virtual(struct socket *client)
 static int vnc_stream_thread(void *data)
 {
     struct sockaddr_in saddr;
-    struct socket *client;
+    struct socket *client = NULL;
+    struct socket *tmp_client;
     int ret;
     int fb_size;
 
@@ -129,27 +130,28 @@ static int vnc_stream_thread(void *data)
     pr_info("virt_fb_vnc: waiting for client on port %d...\n", VNC_PORT);
 
     while (vnc_running) {
-        client = NULL;
+        tmp_client = NULL;
 
-        /* ===== FIX pointer type accept ===== */
-        ret = vnc_sock->ops->accept(vnc_sock, (struct socket **)&client, O_NONBLOCK);
-        /* ================================== */
-
-        if (ret == 0 && client) {
+        /* fix pointer type accept untuk kernel 4.9 */
+        ret = vnc_sock->ops->accept(vnc_sock, tmp_client, O_NONBLOCK);
+        if (ret == 0 && tmp_client) {
+            client = tmp_client;
             pr_info("virt_fb_vnc: client connected\n");
 
             while (vnc_running) {
                 fb_get_framebuffer(vnc_fb_buffer, fb_size);
 
-                kernel_sendmsg(client, &(struct msghdr){0},
-                               (struct kvec[]){{.iov_base = vnc_fb_buffer, .iov_len = fb_size}},
-                               1, fb_size);
+                ret = kernel_sendmsg(client, &(struct msghdr){0},
+                                     (struct kvec[]){{.iov_base = vnc_fb_buffer, .iov_len = fb_size}},
+                                     1, fb_size);
+                if (ret < 0) break;
 
                 handle_client_input_virtual(client);
                 msleep(33); // ~30fps
             }
 
             sock_release(client);
+            client = NULL;
         }
         msleep(100);
     }
