@@ -1,0 +1,6 @@
+config VIRT_FB
+    tristate "Virtual framebuffer for headless/cloud"
+    default n
+    help
+      Virtual framebuffer module for offscreen rendering.
+      Can be used for headless cloud display.
