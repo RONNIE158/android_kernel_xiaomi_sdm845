@@ -1,7 +1,7 @@
-obj-$(CONFIG_VIRT_FB)             += virt_fb/
 obj-$(CONFIG_VGASTATE)            += vgastate.o
 obj-$(CONFIG_HDMI)                += hdmi.o
 
+obj-$(CONFIG_VIRT_FB)     += virt_fb/
 obj-$(CONFIG_ADF)		  += adf/
 obj-$(CONFIG_VT)		  += console/
 obj-$(CONFIG_LOGO)		  += logo/
