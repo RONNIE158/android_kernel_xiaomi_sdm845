@@ -1,7 +1,10 @@
 /*
  * drivers/video/virt_fb/virt_fb.c
  *
- * Secondary virtual framebuffer updated directly from HWC/KGSL for headless VNC.
+ * Virtual framebuffer for headless / VNC usage.
+ *
+ * - Uses vmalloc_user() so userspace can mmap() the buffer safely.
+ * - Provides minimal fbdev ops and fb_mmap implementation.
  *
  * Author: Bro
  * License: GPL
@@ -12,17 +15,17 @@
 #include <linux/kernel.h>
 #include <linux/fb.h>
 #include <linux/vmalloc.h>
-#include <linux/mutex.h>
+#include <linux/mm.h>
 #include <linux/string.h>
-#include <linux/notifier.h>
-#include <linux/platform_device.h>
+#include <linux/uaccess.h>
+#include <linux/slab.h>
+#include <linux/moduleparam.h>
 
 static struct fb_info *virt_fb;
 static void *virt_fb_mem;
 static unsigned long virt_fb_mem_size;
-static DEFINE_MUTEX(virt_fb_lock);
 
-/* Default params */
+/* Default params (can be changed before build as needed) */
 static unsigned int fb_width = 1920;
 static unsigned int fb_height = 1080;
 static unsigned int fb_bpp = 32;
@@ -32,38 +35,57 @@ MODULE_PARM_DESC(fb_width, "Virt FB width");
 module_param(fb_height, uint, 0444);
 MODULE_PARM_DESC(fb_height, "Virt FB height");
 module_param(fb_bpp, uint, 0444);
-MODULE_PARM_DESC(fb_bpp, "Virt FB bits-per-pixel");
+MODULE_PARM_DESC(fb_bpp, "Virt FB bits-per-pixel (commonly 32)");
 
-/* --- FB OPS --- */
-static void virt_fb_fillrect(struct fb_info *info, const struct fb_fillrect *rect) {}
-static void virt_fb_copyarea(struct fb_info *info, const struct fb_copyarea *area) {}
-static void virt_fb_imageblit(struct fb_info *info, const struct fb_image *image) {}
+/* Dummy ops: no hardware acceleration, so use no-op helpers */
+static void virt_fb_fillrect(struct fb_info *info, const struct fb_fillrect *rect) { (void)info; (void)rect; }
+static void virt_fb_copyarea(struct fb_info *info, const struct fb_copyarea *area) { (void)info; (void)area; }
+static void virt_fb_imageblit(struct fb_info *info, const struct fb_image *image) { (void)info; (void)image; }
 
+/* mmap: map vmalloc_user() memory into userspace */
 static int virt_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
 {
-    unsigned long start = vma->vm_start;
-    unsigned long size = vma->vm_end - vma->vm_start;
-    unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
-    unsigned long pos, pfn;
+    unsigned long start;
+    unsigned long size;
+    unsigned long offset;
+    unsigned long pos;
+    unsigned long pfn;
+    int ret = 0;
 
-    if (!info || offset + size > info->fix.smem_len)
+    start = vma->vm_start;
+    size = vma->vm_end - vma->vm_start;
+    offset = vma->vm_pgoff << PAGE_SHIFT;
+
+    if (!info || !info->fix.smem_len)
+        return -EINVAL;
+
+    if (offset + size > info->fix.smem_len)
         return -EINVAL;
 
     pos = (unsigned long)info->screen_base + offset;
 
+    /* remap each page from vmalloc area to user vma */
     while (size > 0) {
         pfn = vmalloc_to_pfn((void *)pos);
-        if (!pfn)
-            return -EFAULT;
-        if (remap_pfn_range(vma, start, pfn, PAGE_SIZE, vma->vm_page_prot))
-            return -EAGAIN;
+        if (!pfn) {
+            ret = -EFAULT;
+            break;
+        }
+
+        if (remap_pfn_range(vma, start, pfn, PAGE_SIZE, vma->vm_page_prot)) {
+            ret = -EAGAIN;
+            break;
+        }
 
         start += PAGE_SIZE;
         pos += PAGE_SIZE;
         size -= PAGE_SIZE;
     }
 
-    return 0;
+    if (!ret)
+        pr_debug("virt_fb: mmap to userspace successful (mem=%lu)\n", info->fix.smem_len);
+
+    return ret;
 }
 
 static struct fb_ops virt_fb_ops = {
@@ -74,87 +96,80 @@ static struct fb_ops virt_fb_ops = {
     .fb_mmap      = virt_fb_mmap,
 };
 
-/* --- Update virt_fb from HWC/KGSL buffer --- */
-static void virt_fb_update_from_hwc(void *hwc_buffer, size_t len)
-{
-    if (!virt_fb_mem || !hwc_buffer)
-        return;
-
-    if (len > virt_fb_mem_size)
-        len = virt_fb_mem_size;
-
-    mutex_lock(&virt_fb_lock);
-    memcpy(virt_fb_mem, hwc_buffer, len);
-    mutex_unlock(&virt_fb_lock);
-}
-
-/* --- FB NOTIFIER HOOK --- */
-static int virt_fb_fb_notifier(struct notifier_block *nb, unsigned long event, void *data)
-{
-    struct fb_event *ev = data;
-
-    if (event == FB_EVENT_UPDATE && ev->info && ev->info->screen_base)
-        virt_fb_update_from_hwc(ev->info->screen_base, ev->info->fix.smem_len);
-
-    return 0;
-}
-
-static struct notifier_block virt_fb_nb = {
-    .notifier_call = virt_fb_fb_notifier,
-};
-
-/* --- INIT/EXIT --- */
 static int __init virt_fb_init(void)
 {
     int ret;
-    unsigned long line_len = fb_width * (fb_bpp/8);
-    unsigned long mem_size = line_len * fb_height;
+    unsigned int width;
+    unsigned int height;
+    unsigned int bpp;
+    unsigned long line_len;
+    unsigned long mem_size;
     struct fb_fix_screeninfo fix;
     struct fb_var_screeninfo var;
 
-    /* allocate framebuffer memory */
-    virt_fb_mem = vmalloc_user(mem_size);
-    if (!virt_fb_mem)
-        return -ENOMEM;
+    width = fb_width;
+    height = fb_height;
+    bpp = fb_bpp;
 
-    /* allocate fb_info */
+    /* calculate sizes */
+    line_len = width * (bpp / 8);
+    mem_size = line_len * height;
+
+    /* allocate vmalloc_user area so userspace mmap works */
+    virt_fb_mem = vmalloc_user(mem_size);
+    if (!virt_fb_mem) {
+        pr_err("virt_fb: vmalloc_user(%lu) failed\n", mem_size);
+        return -ENOMEM;
+    }
+
+    /* get fb_info structure */
     virt_fb = framebuffer_alloc(0, NULL);
     if (!virt_fb) {
+        pr_err("virt_fb: framebuffer_alloc failed\n");
         vfree(virt_fb_mem);
         return -ENOMEM;
     }
 
+    /* setup fb_info */
     virt_fb->screen_base = virt_fb_mem;
     virt_fb->fbops = &virt_fb_ops;
 
-    /* setup fix info */
+    /* fill fix and var structures */
     memset(&fix, 0, sizeof(fix));
-    snprintf(fix.id, sizeof(fix.id), "virt_fb1");
+    snprintf(fix.id, sizeof(fix.id), "virt_fb");
+    fix.smem_start = (unsigned long)virt_fb_mem; /* user-space should not rely on this */
     fix.smem_len = mem_size;
     fix.line_length = line_len;
     fix.type = FB_TYPE_PACKED_PIXELS;
     fix.visual = FB_VISUAL_TRUECOLOR;
+
     memcpy(&virt_fb->fix, &fix, sizeof(fix));
 
-    /* setup var info */
     memset(&var, 0, sizeof(var));
-    var.xres = fb_width;
-    var.yres = fb_height;
-    var.xres_virtual = fb_width;
-    var.yres_virtual = fb_height;
-    var.bits_per_pixel = fb_bpp;
-    var.red.offset = 16; var.red.length = 8;
-    var.green.offset = 8; var.green.length = 8;
-    var.blue.offset = 0; var.blue.length = 8;
+    var.xres = width;
+    var.yres = height;
+    var.xres_virtual = width;
+    var.yres_virtual = height;
+    var.bits_per_pixel = bpp;
+    var.red.offset = (bpp == 32) ? 16 : 11;
+    var.red.length = (bpp == 32) ? 8 : 5;
+    var.green.offset = (bpp == 32) ? 8 : 5;
+    var.green.length = (bpp == 32) ? 8 : 6;
+    var.blue.offset = (bpp == 32) ? 0 : 0;
+    var.blue.length = (bpp == 32) ? 8 : 5;
     var.activate = FB_ACTIVATE_NOW;
+
     memcpy(&virt_fb->var, &var, sizeof(var));
 
+    virt_fb->fix.mmio_start = 0;
+    virt_fb->fix.mmio_len = 0;
     virt_fb->flags = FBINFO_FLAG_DEFAULT;
     virt_fb->pseudo_palette = NULL;
 
-    /* register framebuffer */
+    /* register to kernel framebuffer subsystem */
     ret = register_framebuffer(virt_fb);
     if (ret < 0) {
+        pr_err("virt_fb: register_framebuffer failed: %d\n", ret);
         framebuffer_release(virt_fb);
         vfree(virt_fb_mem);
         return ret;
@@ -162,27 +177,25 @@ static int __init virt_fb_init(void)
 
     virt_fb_mem_size = mem_size;
 
-    /* register notifier for automatic HWC update */
-    fb_register_client(&virt_fb_nb);
-
-    pr_info("virt_fb: registered /dev/fb1 and hooked to HWC/KGSL\n");
+    pr_info("virt_fb: registered /dev/fb0 (%ux%u@%u) mem=%lu bytes\n",
+            width, height, bpp, virt_fb_mem_size);
 
     return 0;
 }
 
 static void __exit virt_fb_exit(void)
 {
-    fb_unregister_client(&virt_fb_nb);
-
     if (virt_fb) {
         unregister_framebuffer(virt_fb);
         framebuffer_release(virt_fb);
         virt_fb = NULL;
     }
+
     if (virt_fb_mem) {
         vfree(virt_fb_mem);
         virt_fb_mem = NULL;
     }
+
     pr_info("virt_fb: removed\n");
 }
 
@@ -191,4 +204,4 @@ module_exit(virt_fb_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Bro");
-MODULE_DESCRIPTION("Secondary virtual framebuffer auto-updated from HWC/KGSL for VNC");
+MODULE_DESCRIPTION("Virtual framebuffer with mmap support for headless Android / VNC");
