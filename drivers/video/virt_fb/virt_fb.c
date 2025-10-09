@@ -88,7 +88,7 @@ static int virt_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
     return ret;
 }
 
-static const struct fb_ops virt_fb_ops = {
+static struct fb_ops virt_fb_ops = {
     .owner        = THIS_MODULE,
     .fb_fillrect  = virt_fb_fillrect,
     .fb_copyarea  = virt_fb_copyarea,
