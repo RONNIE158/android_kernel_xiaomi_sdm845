@@ -1,6 +1,6 @@
 config VIRT_FB
-    tristate "Virtual framebuffer for headless/cloud"
-    default n
+    tristate "Virtual framebuffer for headless / VNC"
+    default y
     help
-      Virtual framebuffer module for offscreen rendering.
-      Can be used for headless cloud display.
+      Provides a secondary framebuffer (/dev/fb1) which can be updated
+      from userspace daemon or HWC/SurfaceFlinger for VNC streaming.
