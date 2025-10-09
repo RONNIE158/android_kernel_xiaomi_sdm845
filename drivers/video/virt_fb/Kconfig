@@ -4,3 +4,10 @@ config VIRT_FB
     help
       Provides a secondary framebuffer (/dev/fb1) which can be updated
       from userspace daemon or HWC/SurfaceFlinger for VNC streaming.
+
+config VIRT_VNC_DAEMON
+    bool "Build virt_vnc_daemon userspace helper"
+    depends on VIRT_FB
+    default y
+    help
+      Userspace daemon to map /dev/fb1 (virt_fb) and stream framebuffer to VNC.
