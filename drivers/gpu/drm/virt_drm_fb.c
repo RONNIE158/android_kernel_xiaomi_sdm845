@@ -14,7 +14,6 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/mutex.h>
-#include <drm/drm_drv.h>
 #include <drm/drm_device.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_plane.h>
